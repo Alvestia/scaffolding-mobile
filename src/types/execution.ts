@@ -1,0 +1,137 @@
+/* eslint-disable @typescript-eslint/no-redeclare */
+export const ExecutionOperationType = {
+  MONTAGEM: 'MONTAGEM',
+  DESMONTAGEM: 'DESMONTAGEM',
+} as const
+
+export type ExecutionOperationType =
+  (typeof ExecutionOperationType)[keyof typeof ExecutionOperationType]
+
+export const ExecutionInputType = {
+  QUANTIDADE: 'QUANTIDADE',
+  PERCENTUAL: 'PERCENTUAL',
+} as const
+
+export type ExecutionInputType = (typeof ExecutionInputType)[keyof typeof ExecutionInputType]
+
+export type ExecutionLaborMode = 'UNASSIGNED' | 'CREW' | 'FUNCTION_QUANTITY'
+
+export type ExecutionComponentAdvanceInput = {
+  scaffoldComponentId: string
+  inputType: ExecutionInputType
+  inputValue: number
+}
+
+export const MeasurementAdjustmentType = {
+  DEDUCTION: 'DEDUCTION',
+  ADDITION: 'ADDITION',
+} as const
+
+export type MeasurementAdjustmentType =
+  (typeof MeasurementAdjustmentType)[keyof typeof MeasurementAdjustmentType]
+
+export type ExecutionMeasurementAdjustmentDraft = {
+  localId: string
+  scope: 'SCAFFOLD' | 'COMPONENT'
+  scaffoldComponentId?: string
+  measurementUnit: 'M3' | 'M2' | 'UNIDADE'
+  type: MeasurementAdjustmentType
+  quantity: number
+  reason: string
+}
+
+export type ExecutionDraft = {
+  localId: string
+  scaffoldServiceId: string
+  operationType: ExecutionOperationType
+  inputType: ExecutionInputType
+  inputValue: number
+  startTime: string
+  endTime: string
+  notes?: string
+  crewId?: string
+  scaffoldComponentIds?: string[]
+  crewSize?: number
+  manHours?: number
+  memberEmployeeIds?: string[]
+}
+
+export type CreateExecutionEntryDto = {
+  clientMutationId?: string
+  scaffoldServiceId: string
+  operationType: ExecutionOperationType
+  inputType: ExecutionInputType
+  inputValue: number
+  startTime: string
+  endTime: string
+  notes?: string
+  crewId?: string
+  laborMode?: ExecutionLaborMode
+  scaffoldComponentIds?: string[]
+  scaffoldComponentAdvances?: ExecutionComponentAdvanceInput[]
+  crewSize?: number
+  manHours?: number
+  memberEmployeeIds?: string[]
+}
+
+export type ExecutionEvidenceDraft = {
+  id: string
+  uri: string
+  fileName: string
+  mimeType: string
+  base64?: string
+  size?: number
+  checksumSha256?: string
+}
+
+export type QueuedExecutionEntryPayload = {
+  entry: CreateExecutionEntryDto
+  scaffoldId?: string
+  adjustments?: ExecutionMeasurementAdjustmentDraft[]
+  evidenceCaption?: string
+  evidences?: ExecutionEvidenceDraft[]
+}
+
+export type EmergencyScaffoldComponentDraft = {
+  category?: string
+  name: string
+  description?: string
+  measurementUnit?: 'M3' | 'M2' | 'LINEAR_M' | 'UNIDADE'
+  repeatCount?: number
+  height?: number
+  width?: number
+  length?: number
+  plannedQuantity?: number
+  trackAssembly?: boolean
+  trackDisassembly?: boolean
+}
+
+export type EmergencyScaffoldDraft = {
+  localId: string
+  mobileLocalId?: string
+  code?: string
+  quantity?: number
+  scaffoldTypeId: string
+  companyId: string
+  unitId: string
+  contractId: string
+  workOrderId?: string
+  projectId?: string
+  areaId?: string
+  description?: string
+  location?: string
+  measurementUnit: 'M3' | 'M2' | 'LINEAR_M' | 'UNIDADE'
+  height?: number
+  width?: number
+  length?: number
+  volumeM3?: number
+  areaM2?: number
+  linearM?: number
+  autoCreateServices?: boolean
+  createDismantlingService?: boolean
+  assemblyForecastStartDate?: string
+  assemblyForecastEndDate?: string
+  disassemblyForecastStartDate?: string
+  disassemblyForecastEndDate?: string
+  components?: EmergencyScaffoldComponentDraft[]
+}

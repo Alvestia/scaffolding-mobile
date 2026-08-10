@@ -1,0 +1,20 @@
+import { z } from 'zod'
+
+const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+export const executionFormSchema = z
+  .object({
+    inputValue: z
+      .string()
+      .min(1, 'Informe a quantidade executada.')
+      .refine((value) => Number(value) > 0, 'A quantidade deve ser maior que zero.'),
+    startTime: z.string().regex(timeRegex, 'Use o formato HH:mm.'),
+    endTime: z.string().regex(timeRegex, 'Use o formato HH:mm.'),
+    notes: z.string().optional(),
+  })
+  .refine((values) => values.endTime > values.startTime, {
+    message: 'O horario final deve ser posterior ao inicial.',
+    path: ['endTime'],
+  })
+
+export type ExecutionFormSchema = z.infer<typeof executionFormSchema>

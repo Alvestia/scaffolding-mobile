@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "name": "Scaffold Mobile",
+    "slug": "scaffold-kaefer",
+    "version": "2.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/images/brand/app-icon.png",
+    "scheme": "scaffoldingmobile",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/images/brand/app-icon.png",
+      "bundleIdentifier": "br.com.rip.scaffolding"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#2C414A",
+        "foregroundImage": "./assets/images/brand/adaptive-icon.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "br.com.rip.scaffolding",
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/brand/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#2C414A",
+          "image": "./assets/images/brand/kaefer-wordmark-white.png",
+          "imageWidth": 220,
+          "resizeMode": "contain"
+        }
+      ],
+      "expo-sqlite",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Permita que o Scaffold Mobile use o Face ID para desbloquear sua sessao."
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9ef252e8-b451-4e3c-85b2-b9a0c1dfad6e"
+      }
+    },
+    "owner": "tiagoalves.viana"
+  }
+}
