@@ -13,6 +13,18 @@ function cacheKey(filters: Filters) {
   return `areas:${filters.companyId ?? 'all'}:${filters.unitId ?? 'all'}:${filters.contractId ?? 'all'}:${filters.projectId ?? 'all'}`
 }
 
+function scopedCacheKey(filters: Filters) {
+  return cacheKey({
+    companyId: filters.companyId,
+    unitId: filters.unitId,
+    contractId: filters.contractId,
+  })
+}
+
+function filterByProject(items: Area[], projectId?: string | null) {
+  return projectId ? items.filter((item) => item.projectId === projectId) : items
+}
+
 export async function fetchAreas(filters: Filters) {
   const data = await getAllPages<Area>('/areas', {
     params: {
@@ -20,6 +32,10 @@ export async function fetchAreas(filters: Filters) {
       unitId: filters.unitId ?? undefined,
       contractId: filters.contractId ?? undefined,
       projectId: filters.projectId ?? undefined,
+    },
+    headers: {
+      'X-Selected-Unit-Id': filters.unitId,
+      'X-Selected-Contract-Id': filters.contractId,
     },
   })
 
@@ -29,5 +45,9 @@ export async function fetchAreas(filters: Filters) {
 }
 
 export async function getCachedAreas(filters: Filters) {
-  return (await getReferenceCache<Area[]>(cacheKey(filters))) ?? []
+  const exact = await getReferenceCache<Area[]>(cacheKey(filters))
+  if (exact) return exact
+
+  const scoped = (await getReferenceCache<Area[]>(scopedCacheKey(filters))) ?? []
+  return filterByProject(scoped, filters.projectId)
 }

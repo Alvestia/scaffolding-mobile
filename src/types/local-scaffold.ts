@@ -11,6 +11,11 @@ export type LocalScaffoldService = {
   description: string | null
   scaffoldCode: string | null
   scaffoldDescription: string | null
+  workOrderId?: string | null
+  workOrderCode?: string | null
+  areaId?: string | null
+  areaCode?: string | null
+  areaName?: string | null
   contractId: string
   unitId: string
   syncStatus: SyncStatus

@@ -16,6 +16,11 @@ type LocalScaffoldServiceRow = {
   description: string | null
   scaffold_code: string | null
   scaffold_description: string | null
+  work_order_id: string | null
+  work_order_code: string | null
+  area_id: string | null
+  area_code: string | null
+  area_name: string | null
   contract_id: string
   unit_id: string
   sync_status: string
@@ -34,6 +39,11 @@ function rowToModel(row: LocalScaffoldServiceRow): LocalScaffoldService {
     description: row.description,
     scaffoldCode: row.scaffold_code,
     scaffoldDescription: row.scaffold_description,
+    workOrderId: row.work_order_id ?? null,
+    workOrderCode: row.work_order_code ?? null,
+    areaId: row.area_id ?? null,
+    areaCode: row.area_code ?? null,
+    areaName: row.area_name ?? null,
     contractId: row.contract_id,
     unitId: row.unit_id,
     syncStatus: row.sync_status as LocalScaffoldService['syncStatus'],
@@ -67,8 +77,9 @@ export const localScaffoldServiceRepository = {
           owner_tenant_id, owner_user_id,
           local_id, local_scaffold_id, remote_id, type, planned_unit,
           planned_quantity, description, scaffold_code, scaffold_description,
+          work_order_id, work_order_code, area_id, area_code, area_name,
           contract_id, unit_id, sync_status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           owner.tenantId,
           owner.userId,
@@ -81,6 +92,11 @@ export const localScaffoldServiceRepository = {
           item.description ?? null,
           item.scaffoldCode ?? null,
           item.scaffoldDescription ?? null,
+          item.workOrderId ?? null,
+          item.workOrderCode ?? null,
+          item.areaId ?? null,
+          item.areaCode ?? null,
+          item.areaName ?? null,
           item.contractId,
           item.unitId,
           item.syncStatus,
@@ -131,13 +147,7 @@ export const localScaffoldServiceRepository = {
          WHERE contract_id = ? AND unit_id = ? AND sync_status = ?
            AND owner_tenant_id = ? AND owner_user_id = ?
          ORDER BY created_at ASC`,
-        [
-          scope.contractId,
-          scope.unitId,
-          SyncStatus.PENDING,
-          owner.tenantId,
-          owner.userId,
-        ],
+        [scope.contractId, scope.unitId, SyncStatus.PENDING, owner.tenantId, owner.userId],
       ),
     )
 
@@ -196,14 +206,7 @@ export const localScaffoldServiceRepository = {
           `UPDATE local_scaffold_services
            SET remote_id = ?, sync_status = ?, updated_at = ?
            WHERE owner_tenant_id = ? AND owner_user_id = ? AND local_id = ?`,
-          [
-            match.id,
-            SyncStatus.SYNCED,
-            timestamp,
-            owner.tenantId,
-            owner.userId,
-            row.local_id,
-          ],
+          [match.id, SyncStatus.SYNCED, timestamp, owner.tenantId, owner.userId, row.local_id],
         ),
       )
     }

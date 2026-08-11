@@ -7,6 +7,7 @@ import { colors, radius, spacing } from '@/constants/theme'
 import type { ExecutionComponentAdvanceInput, ExecutionInputType } from '@/types/execution'
 import { ExecutionInputType as InputType } from '@/types/execution'
 import type { ScaffoldComponent } from '@/types/scaffold-component'
+import { buildInheritedComponentAdvances } from '@/utils/component-advances'
 
 type Props = {
   components: ScaffoldComponent[]
@@ -59,19 +60,22 @@ export function ExecutionComponentAdvanceSection({
         if (current) return current
 
         const component = components.find((item) => item.id === componentId)
-        const total = component?.quantity ?? 0
-        const remaining = component ? availableQuantity(component, operationType) : 0
-        const maxPercent = total > 0 ? (remaining / total) * 100 : 0
-        const inheritedPercent =
-          parentInputType === InputType.PERCENTUAL
-            ? Math.min(Math.max(parentInputValue, 0), maxPercent)
-            : 0
-
-        return {
-          scaffoldComponentId: componentId,
-          inputType: InputType.PERCENTUAL,
-          inputValue: Number(inheritedPercent.toFixed(2)),
-        }
+        return component
+          ? (buildInheritedComponentAdvances(
+              [component],
+              operationType,
+              parentInputType,
+              parentInputValue,
+            )[0] ?? {
+              scaffoldComponentId: componentId,
+              inputType: InputType.PERCENTUAL,
+              inputValue: 0,
+            })
+          : {
+              scaffoldComponentId: componentId,
+              inputType: InputType.PERCENTUAL,
+              inputValue: 0,
+            }
       }),
     )
   }

@@ -4,6 +4,8 @@ export type Employee = {
   badge?: string | null
   registrationCode?: string | null
   role?: string | null
+  companyId?: string | null
+  unitId?: string | null
   contractId?: string | null
   active?: boolean
 }

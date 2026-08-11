@@ -9,6 +9,7 @@ import { fetchQueueServices } from '@/services/scaffold-services.service'
 import { fetchScaffoldTypes } from '@/services/scaffold-types.service'
 import { fetchLatestScaffold } from '@/services/scaffolds.service'
 import { fetchWorkOrders } from '@/services/work-orders.service'
+import { fetchWorkFunctions } from '@/services/work-functions.service'
 import { runFullSync } from '@/sync/sync-engine'
 import type { QueueServiceItem } from '@/types/scaffold-service'
 import { nowIso } from '@/utils/date'
@@ -78,10 +79,7 @@ export async function runManualSync(
 
   const emit = () => onProgress?.(steps.map((step) => ({ ...step })))
 
-  const runStep = async <TResult>(
-    key: ManualSyncStepKey,
-    task: () => Promise<TResult>,
-  ) => {
+  const runStep = async <TResult>(key: ManualSyncStepKey, task: () => Promise<TResult>) => {
     steps = updateStep(steps, key, {
       status: 'running',
       progress: 35,
@@ -123,7 +121,8 @@ export async function runManualSync(
     await Promise.all([
       fetchScaffoldTypes(),
       fetchDeviationTypes(),
-      fetchProjects(),
+      fetchProjects(scope),
+      fetchWorkFunctions(scope),
       fetchAreas({
         companyId: scope.companyId ?? null,
         unitId: scope.unitId,

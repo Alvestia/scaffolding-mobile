@@ -65,6 +65,11 @@ function buildLocalServiceStubs(
   localScaffoldId: string,
   payload: EmergencyScaffoldDraft,
   calculatedTotal: number,
+  references?: {
+    workOrderCode?: string | null
+    areaCode?: string | null
+    areaName?: string | null
+  },
 ): Omit<LocalScaffoldService, 'createdAt' | 'updatedAt' | 'remoteId'>[] {
   const stubs: Omit<LocalScaffoldService, 'createdAt' | 'updatedAt' | 'remoteId'>[] = []
 
@@ -78,6 +83,11 @@ function buildLocalServiceStubs(
       description: payload.description ?? null,
       scaffoldCode: payload.code ?? null,
       scaffoldDescription: payload.description ?? null,
+      workOrderId: payload.workOrderId ?? null,
+      workOrderCode: references?.workOrderCode ?? null,
+      areaId: payload.areaId ?? null,
+      areaCode: references?.areaCode ?? null,
+      areaName: references?.areaName ?? null,
       contractId: payload.contractId,
       unitId: payload.unitId,
       syncStatus: SyncStatus.PENDING,
@@ -94,6 +104,11 @@ function buildLocalServiceStubs(
       description: payload.description ?? null,
       scaffoldCode: payload.code ?? null,
       scaffoldDescription: payload.description ?? null,
+      workOrderId: payload.workOrderId ?? null,
+      workOrderCode: references?.workOrderCode ?? null,
+      areaId: payload.areaId ?? null,
+      areaCode: references?.areaCode ?? null,
+      areaName: references?.areaName ?? null,
       contractId: payload.contractId,
       unitId: payload.unitId,
       syncStatus: SyncStatus.PENDING,
@@ -234,8 +249,6 @@ export default function EmergencyPage() {
     unitId,
     unitCode,
     unitName,
-    crewId,
-    crewName,
   } = useOperationalContextStore()
   const runSyncNow = useSyncStore((state) => state.runSyncNow)
   const refreshState = useSyncStore((state) => state.refreshState)
@@ -247,7 +260,6 @@ export default function EmergencyPage() {
   const [projectId, setProjectId] = useState('')
   const [areaId, setAreaId] = useState('')
   const [code, setCode] = useState('')
-  const [quantity, setQuantity] = useState('1')
   const [description, setDescription] = useState('')
   const [location, setLocation] = useState('')
   const [measurementUnit, setMeasurementUnit] = useState<MeasurementUnit>(MeasurementUnit.M3)
@@ -282,7 +294,6 @@ export default function EmergencyPage() {
     setProjectId('')
     setAreaId('')
     setCode('')
-    setQuantity('1')
     setDescription('')
     setLocation('')
     setMeasurementUnit(MeasurementUnit.M3)
@@ -345,7 +356,7 @@ export default function EmergencyPage() {
   const latestPendingPayload = latestPendingScaffold?.payload as EmergencyScaffoldDraft | undefined
 
   const scaffoldTypesQuery = useScaffoldTypes()
-  const projectsQuery = useProjects()
+  const projectsQuery = useProjects({ contractId, unitId })
   const areasQuery = useAreas({
     companyId,
     unitId,
@@ -412,7 +423,6 @@ export default function EmergencyPage() {
     [height, length, measurementUnit, width],
   )
 
-  const requestedQuantity = Number(quantity || 1)
   const serviceSummary = useMemo(() => {
     if (!autoCreateServices && !workOrderId) {
       return 'Sem serviços automáticos.'
@@ -471,15 +481,32 @@ export default function EmergencyPage() {
     caption: item.project?.name ?? undefined,
   }))
 
-  useEffect(() => {
-    if (!workOrderId) {
-      return
-    }
+  const handleSelectWorkOrder = (value: string) => {
+    const workOrder = (workOrdersQuery.data ?? []).find((item) => item.id === value)
 
-    if (!compatibleWorkOrders.some((item) => item.id === workOrderId)) {
+    setWorkOrderId(value)
+    setAutoCreateServices(true)
+    setProjectId(workOrder?.projectId ?? '')
+    setAreaId(workOrder?.areaId ?? '')
+  }
+
+  const handleSelectProject = (value: string) => {
+    setProjectId(value)
+    setAreaId('')
+    setWorkOrderId('')
+  }
+
+  const handleSelectArea = (value: string) => {
+    const area = (areasQuery.data ?? []).find((item) => item.id === value)
+
+    setAreaId(value)
+    if (area?.projectId && area.projectId !== projectId) {
+      setProjectId(area.projectId)
+    }
+    if (selectedWorkOrder?.areaId && selectedWorkOrder.areaId !== value) {
       setWorkOrderId('')
     }
-  }, [compatibleWorkOrders, workOrderId])
+  }
 
   useEffect(() => {
     if (!visibleMeasurementDimensions.height && height) {
@@ -644,21 +671,13 @@ export default function EmergencyPage() {
       return
     }
 
-    if (!scope || !companyId || !crewId) {
-      setSubmitError(
-        'Defina unidade, contrato e equipe antes de criar um andaime emergencial.',
-      )
+    if (!scope || !companyId) {
+      setSubmitError('Defina unidade e contrato antes de criar um andaime emergencial.')
       return
     }
 
     if (!scaffoldTypeId) {
       setSubmitError('Selecione o tipo de andaime.')
-      return
-    }
-
-    const requestedQuantity = Number(quantity || 1)
-    if (!Number.isInteger(requestedQuantity) || requestedQuantity < 1 || requestedQuantity > 100) {
-      setSubmitError('Informe uma quantidade de andaimes entre 1 e 100.')
       return
     }
 
@@ -713,7 +732,6 @@ export default function EmergencyPage() {
       const payload = {
         localId,
         code: codeMode === 'manual' ? manualCode : undefined,
-        quantity: requestedQuantity,
         scaffoldTypeId,
         companyId,
         unitId: scope.unitId,
@@ -748,33 +766,21 @@ export default function EmergencyPage() {
       }
 
       if (!isConnected) {
-        const localStubs: Omit<LocalScaffoldService, 'createdAt' | 'updatedAt' | 'remoteId'>[] = []
+        await outboxRepository.enqueue({
+          localId,
+          entityType: OutboxEntityType.EMERGENCY_SCAFFOLD,
+          contractId: scope.contractId,
+          unitId: scope.unitId,
+          syncStatus: SyncStatus.PENDING,
+          payload,
+        })
 
-        for (let index = 0; index < requestedQuantity; index += 1) {
-          const itemLocalId = createLocalId('emergency')
-          const itemPayload = {
-            ...payload,
-            localId: itemLocalId,
-            quantity: 1,
-            code:
-              codeMode === 'manual'
-                ? requestedQuantity > 1
-                  ? `${manualCode}-${String(index + 1).padStart(2, '0')}`
-                  : manualCode
-                : undefined,
-          }
-
-          await outboxRepository.enqueue({
-            localId: itemLocalId,
-            entityType: OutboxEntityType.EMERGENCY_SCAFFOLD,
-            contractId: scope.contractId,
-            unitId: scope.unitId,
-            syncStatus: SyncStatus.PENDING,
-            payload: itemPayload,
+        const localStubs: Omit<LocalScaffoldService, 'createdAt' | 'updatedAt' | 'remoteId'>[] =
+          buildLocalServiceStubs(localId, payload, calculatedTotal, {
+            workOrderCode: selectedWorkOrder?.code,
+            areaCode: selectedArea?.code,
+            areaName: selectedArea?.name,
           })
-
-          localStubs.push(...buildLocalServiceStubs(itemLocalId, itemPayload, calculatedTotal))
-        }
 
         // Cria stubs locais dos serviços dos andaimes para que o usuário possa
         // registrar avanços offline imediatamente, sem aguardar a sincronização.
@@ -786,7 +792,7 @@ export default function EmergencyPage() {
 
         if (localStubs.length > 0) {
           resetEmergencyForm()
-          askForAdvanceOffline(requestedQuantity)
+          askForAdvanceOffline()
           return
         }
 
@@ -795,26 +801,7 @@ export default function EmergencyPage() {
         return
       }
 
-      const createdItems = []
-      for (let index = 0; index < requestedQuantity; index += 1) {
-        const itemLocalId = createLocalId('emergency')
-        const created = await createEmergencyScaffold({
-          ...payload,
-          localId: itemLocalId,
-          quantity: 1,
-          code:
-            codeMode === 'manual'
-              ? requestedQuantity > 1
-                ? `${manualCode}-${String(index + 1).padStart(2, '0')}`
-                : manualCode
-              : undefined,
-        }, itemLocalId)
-        createdItems.push(isScaffoldBatchResponse(created) ? created.items[0] : created)
-      }
-      const scaffold =
-        createdItems.length === 1
-          ? createdItems[0]
-          : { count: createdItems.length, items: createdItems }
+      const scaffold = await createEmergencyScaffold(payload, localId)
 
       try {
         await cacheLatestScaffoldFromCreation(scope, scaffold)
@@ -878,20 +865,16 @@ export default function EmergencyPage() {
 
             <NetworkStatusIndicator />
 
-            {!scope || !crewId ? (
+            {!scope ? (
               <View style={styles.contextMissingCard}>
                 <Text style={styles.contextMissingTitle}>Prepare a jornada antes</Text>
                 <Text style={styles.contextMissingDescription}>
-                  O cadastro emergencial precisa de unidade, contrato e equipe definidos.
+                  O cadastro emergencial precisa de unidade e contrato definidos.
                 </Text>
                 <Pressable
                   onPress={() => {
                     blurActiveElement()
-                    router.push(
-                      (contractId && unitId
-                        ? '/(app)/context/setup'
-                        : '/(app)/context/unit') as never,
-                    )
+                    router.push('/(app)/context/unit' as never)
                   }}
                   style={({ pressed }) => [
                     styles.primaryButton,
@@ -909,10 +892,7 @@ export default function EmergencyPage() {
                     {contractDescription ?? contractCode ?? 'Contrato operacional'}
                   </Text>
                   <Text style={styles.contextCardMeta}>
-                    {[
-                      unitCode && unitName ? `${unitCode} - ${unitName}` : unitName,
-                      crewName,
-                    ]
+                    {[unitCode && unitName ? `${unitCode} - ${unitName}` : unitName]
                       .filter(Boolean)
                       .join(' • ')}
                   </Text>
@@ -1069,32 +1049,11 @@ export default function EmergencyPage() {
                   {codeMode === 'manual' ? (
                     <CompactInput
                       label="Código do andaime"
-                      placeholder={
-                        Number(quantity || 1) > 1 ? 'Ex.: AND-2026-00021' : 'Ex.: AND-2026-00021'
-                      }
+                      placeholder="Ex.: AND-2026-00021"
                       value={code}
                       onChangeText={setCode}
                     />
                   ) : null}
-
-                  <CompactInput
-                    label="Quantidade de andaimes"
-                    placeholder="1"
-                    keyboardType="number-pad"
-                    value={quantity}
-                    onChangeText={(value) => {
-                      const digits = value.replace(/\D/g, '').slice(0, 3)
-                      setQuantity(digits)
-                    }}
-                  />
-
-                  <Text style={styles.helperText}>
-                    {Number(quantity || 1) > 1
-                      ? codeMode === 'manual'
-                        ? 'O código manual será usado como base: -01, -02, -03...'
-                        : 'Serão criados registros independentes com códigos automáticos.'
-                      : 'Use 1 para cadastrar apenas este andaime.'}
-                  </Text>
 
                   <CompactInput
                     label="Descrição"
@@ -1232,19 +1191,19 @@ export default function EmergencyPage() {
                 </Section>
 
                 <Section
-                  title="Lotes de componentes"
-                  subtitle="Monte a estrutura inicial do andaime para sair mais organizado desde o começo."
+                  title="Componentes do andaime"
+                  subtitle="Adicione cada componente individualmente usando os tipos cadastrados."
                 >
                   <View style={styles.componentSummaryCard}>
-                    <Text style={styles.componentSummaryLabel}>Lotes cadastrados</Text>
+                    <Text style={styles.componentSummaryLabel}>Componentes cadastrados</Text>
                     <Text style={styles.componentSummaryValue}>{draftComponents.length}</Text>
                   </View>
 
                   {draftComponents.length === 0 ? (
                     <View style={styles.inlineEmptyState}>
-                      <Text style={styles.inlineEmptyTitle}>Nenhum lote cadastrado</Text>
+                      <Text style={styles.inlineEmptyTitle}>Nenhum componente cadastrado</Text>
                       <Text style={styles.inlineEmptyDescription}>
-                        Você pode seguir sem lotes ou estruturar o andaime agora.
+                        Você pode seguir sem componentes ou adicioná-los agora.
                       </Text>
                     </View>
                   ) : (
@@ -1255,9 +1214,17 @@ export default function EmergencyPage() {
                             <Text style={styles.componentName}>{component.name}</Text>
                             <Text style={styles.componentMeta}>
                               {[
-                                component.category,
+                                component.componentTypeCode,
                                 component.measurementUnit,
-                                component.plannedQuantity,
+                                component.plannedQuantity
+                                  ? `${component.plannedQuantity} ${
+                                      component.measurementUnit === 'M3'
+                                        ? 'm³'
+                                        : component.measurementUnit === 'M2'
+                                          ? 'm²'
+                                          : 'm'
+                                    }`
+                                  : null,
                               ]
                                 .filter(Boolean)
                                 .join(' • ')}
@@ -1312,7 +1279,7 @@ export default function EmergencyPage() {
                       pressed ? styles.secondaryActionPressed : null,
                     ]}
                   >
-                    <Text style={styles.secondaryActionLabel}>Adicionar lote de componente</Text>
+                    <Text style={styles.secondaryActionLabel}>Adicionar componente</Text>
                     <Ionicons name="add" size={16} color={colors.primaryStrong} />
                   </Pressable>
                 </Section>
@@ -1322,12 +1289,6 @@ export default function EmergencyPage() {
                   subtitle="Depois de cadastrar, perguntamos se você já quer seguir direto para a fila e lançar a execução."
                 >
                   <View style={styles.creationSummaryCard}>
-                    <View style={styles.creationSummaryRow}>
-                      <Text style={styles.creationSummaryLabel}>Quantidade</Text>
-                      <Text style={styles.creationSummaryValue}>
-                        {Number.isFinite(requestedQuantity) ? requestedQuantity : 1}
-                      </Text>
-                    </View>
                     <View style={styles.creationSummaryRow}>
                       <Text style={styles.creationSummaryLabel}>Serviços</Text>
                       <Text style={styles.creationSummaryText}>{serviceSummary}</Text>
@@ -1431,12 +1392,7 @@ export default function EmergencyPage() {
         subtitle="A lista mostra apenas OS abertas/em andamento compatíveis com este contexto."
         options={workOrderOptions}
         selectedValue={workOrderId}
-        onSelect={(value) => {
-          setWorkOrderId(value)
-          if (value) {
-            setAutoCreateServices(true)
-          }
-        }}
+        onSelect={handleSelectWorkOrder}
         onClose={() => setActivePicker(null)}
       />
 
@@ -1446,10 +1402,7 @@ export default function EmergencyPage() {
         subtitle="Projeto é opcional, mas ajuda a organizar áreas e relatórios."
         options={projectOptions}
         selectedValue={projectId}
-        onSelect={(value) => {
-          setProjectId(value)
-          setAreaId('')
-        }}
+        onSelect={handleSelectProject}
         onClose={() => setActivePicker(null)}
       />
 
@@ -1459,7 +1412,7 @@ export default function EmergencyPage() {
         subtitle="Selecione a área operacional quando ela já existir no sistema."
         options={areaOptions}
         selectedValue={areaId}
-        onSelect={setAreaId}
+        onSelect={handleSelectArea}
         onClose={() => setActivePicker(null)}
       />
 

@@ -64,3 +64,27 @@ test('legacy component selections remain readable as a migration fallback', () =
   assert.deepEqual(normalized?.entry.memberEmployeeIds, ['employee-legacy'])
   assert.deepEqual(normalized?.adjustments, [])
 })
+
+test('execution outbox preserves effective quantities by work function', () => {
+  const normalized = normalizeQueuedExecutionPayload({
+    entry: {
+      scaffoldServiceId: 'service-functions',
+      operationType: 'MONTAGEM',
+      inputType: 'QUANTIDADE',
+      inputValue: 4.5,
+      startTime: '2026-08-10T10:00:00.000Z',
+      endTime: '2026-08-10T11:00:00.000Z',
+      laborMode: 'FUNCTION_QUANTITY',
+      functionQuantities: [
+        { workFunctionId: 'function-montador', quantity: 3 },
+        { workFunctionId: 'function-encarregado', quantity: 1 },
+      ],
+    },
+  })
+
+  assert.equal(normalized?.entry.laborMode, 'FUNCTION_QUANTITY')
+  assert.deepEqual(normalized?.entry.functionQuantities, [
+    { workFunctionId: 'function-montador', quantity: 3 },
+    { workFunctionId: 'function-encarregado', quantity: 1 },
+  ])
+})

@@ -81,6 +81,7 @@ export default function ContractSelectionPage() {
       await prefetchScopedReferenceData({
         contractId: selectedContract.id,
         unitId: selectedUnit.id,
+        companyId: selectedUnit.companyId,
       })
 
       setScope({
@@ -128,9 +129,7 @@ export default function ContractSelectionPage() {
             ? `Unidade selecionada: ${selectedUnit.code} - ${selectedUnit.name}`
             : 'Escolha o contrato que sera usado nesta jornada.'
       }
-      emptyTitle={
-        scopeQuery.isLoading ? 'Carregando contratos' : 'Nenhum contrato encontrado'
-      }
+      emptyTitle={scopeQuery.isLoading ? 'Carregando contratos' : 'Nenhum contrato encontrado'}
       emptyDescription={
         scopeQuery.isLoading
           ? 'Buscando os contratos liberados para a unidade selecionada.'

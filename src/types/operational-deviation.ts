@@ -54,7 +54,7 @@ export type DeviationEvidenceDraft = {
 export type CreateOperationalDeviationDto = {
   clientMutationId?: string
   deviationTypeId: string
-  crewId: string
+  crewId?: string
   laborMode: 'CREW' | 'FUNCTION_QUANTITY' | 'UNASSIGNED'
   title: string
   description?: string
@@ -62,6 +62,10 @@ export type CreateOperationalDeviationDto = {
   ocurredAt: string
   resolvedAt: string
   memberEmployeeIds?: string[]
+  functionQuantities?: {
+    workFunctionId: string
+    quantity: number
+  }[]
   isGlobal: boolean
   companyId?: string
   unitId?: string

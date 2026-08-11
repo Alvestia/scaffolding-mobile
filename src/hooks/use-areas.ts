@@ -13,8 +13,16 @@ export function useAreas(filters: Filters) {
   const isConnected = useConnectivityStore((state) => state.isConnected)
 
   return useQuery({
-    queryKey: ['areas', filters.companyId, filters.unitId, filters.contractId, filters.projectId, isConnected],
+    queryKey: [
+      'areas',
+      filters.companyId,
+      filters.unitId,
+      filters.contractId,
+      filters.projectId,
+      isConnected,
+    ],
     enabled: Boolean(filters.unitId && filters.contractId),
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       if (!filters.unitId || !filters.contractId) {
         return []

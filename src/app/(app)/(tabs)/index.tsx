@@ -26,7 +26,6 @@ import { useOperationalContextStore } from '@/store/operational-context-store'
 import { useSyncStore } from '@/store/sync-store'
 import { formatShortDateTime } from '@/utils/date'
 import { getErrorMessage } from '@/utils/error'
-import { blurActiveElement } from '@/utils/focus'
 import { getActiveDeviceCredential } from '@/services/session-storage'
 import { revokeDeviceSession } from '@/services/device-session.service'
 
@@ -51,9 +50,6 @@ export default function HomePage() {
   })
 
   const hasScope = Boolean(context.unitId && context.contractId)
-  const hasExecutionContext = Boolean(
-    context.unitId && context.contractId && context.crewId,
-  )
   const queueItems = queueQuery.data ?? []
   const loadingBase =
     hasScope && (queueQuery.isLoading || (queueQuery.isFetching && !queueItems.length))
@@ -433,21 +429,6 @@ export default function HomePage() {
             </View>
 
             <View style={styles.bottomInfo}>
-              <Pressable
-                onPress={() => {
-                  blurActiveElement()
-                  router.push('/(app)/context/setup' as never)
-                }}
-                style={({ pressed }) => [styles.infoCard, pressed ? styles.infoCardPressed : null]}
-              >
-                <Text style={styles.infoLabel}>Equipe operacional</Text>
-                <Text style={styles.infoValue}>
-                  {hasExecutionContext
-                    ? (context.crewName ?? 'Equipe')
-                    : 'Definir agora'}
-                </Text>
-              </Pressable>
-
               <View style={styles.infoCard}>
                 <Text style={styles.infoLabel}>Ultima sincronizacao</Text>
                 <Text style={styles.infoValue}>{formatShortDateTime(lastSyncAt)}</Text>

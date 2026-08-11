@@ -149,49 +149,49 @@ export function isScaffoldBatchResponse(
   return 'count' in result && Array.isArray(result.items)
 }
 
-export async function createEmergencyScaffold(
-  draft: EmergencyScaffoldDraft,
-  mutationId?: string,
-) {
-  const { data } = await api.post('/scaffolds', {
-    code: draft.code,
-    mobileLocalId: draft.mobileLocalId ?? draft.localId,
-    companyId: draft.companyId,
-    unitId: draft.unitId,
-    contractId: draft.contractId,
-    workOrderId: draft.workOrderId,
-    projectId: draft.projectId,
-    areaId: draft.areaId,
-    scaffoldTypeId: draft.scaffoldTypeId,
-    description: draft.description,
-    location: draft.location,
-    measurementUnit: draft.measurementUnit === 'LINEAR_M' ? 'UNIDADE' : draft.measurementUnit,
-    height: draft.height,
-    width: draft.width,
-    length: draft.length,
-    volumeM3: draft.volumeM3,
-    areaM2: draft.areaM2,
-    linearM: draft.linearM,
-    origin: 'CAMPO_EMERGENCIAL',
-    components: draft.components?.map((component) => ({
-      name: component.name,
-      notes: component.description,
-      measurementUnit:
-        component.measurementUnit === 'LINEAR_M'
-          ? 'UNIDADE'
-          : (component.measurementUnit ?? 'UNIDADE'),
-      quantity: component.plannedQuantity ?? 1,
-      height: component.height,
-      width: component.width,
-      length: component.length,
-    })),
-    autoCreateServices: draft.autoCreateServices ?? true,
-    createDismantlingService: draft.createDismantlingService ?? true,
-    assemblyForecastStartDate: draft.assemblyForecastStartDate,
-    assemblyForecastEndDate: draft.assemblyForecastEndDate,
-    disassemblyForecastStartDate: draft.disassemblyForecastStartDate,
-    disassemblyForecastEndDate: draft.disassemblyForecastEndDate,
-  }, mutationId ? { headers: { 'Idempotency-Key': mutationId } } : undefined)
+export async function createEmergencyScaffold(draft: EmergencyScaffoldDraft, mutationId?: string) {
+  const { data } = await api.post(
+    '/scaffolds',
+    {
+      code: draft.code,
+      mobileLocalId: draft.mobileLocalId ?? draft.localId,
+      companyId: draft.companyId,
+      unitId: draft.unitId,
+      contractId: draft.contractId,
+      workOrderId: draft.workOrderId,
+      primaryWorkOrderId: draft.workOrderId,
+      projectId: draft.projectId,
+      areaId: draft.areaId,
+      scaffoldTypeId: draft.scaffoldTypeId,
+      description: draft.description,
+      location: draft.location,
+      measurementUnit: draft.measurementUnit === 'LINEAR_M' ? 'UNIDADE' : draft.measurementUnit,
+      height: draft.height,
+      width: draft.width,
+      length: draft.length,
+      volumeM3: draft.volumeM3,
+      areaM2: draft.areaM2,
+      linearM: draft.linearM,
+      origin: 'CAMPO_EMERGENCIAL',
+      components: draft.components?.map((component) => ({
+        componentTypeId: component.componentTypeId,
+        name: component.name,
+        notes: component.description,
+        measurementUnit: component.measurementUnit,
+        quantity: component.plannedQuantity ?? 1,
+        height: component.height,
+        width: component.width,
+        length: component.length,
+      })),
+      autoCreateServices: draft.autoCreateServices ?? true,
+      createDismantlingService: draft.createDismantlingService ?? true,
+      assemblyForecastStartDate: draft.assemblyForecastStartDate,
+      assemblyForecastEndDate: draft.assemblyForecastEndDate,
+      disassemblyForecastStartDate: draft.disassemblyForecastStartDate,
+      disassemblyForecastEndDate: draft.disassemblyForecastEndDate,
+    },
+    mutationId ? { headers: { 'Idempotency-Key': mutationId } } : undefined,
+  )
 
   return data as CreateEmergencyScaffoldResult
 }

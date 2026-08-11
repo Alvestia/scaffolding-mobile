@@ -71,17 +71,19 @@ export default function ContextSetupPage() {
         return []
       }
 
+      const employeeScope = {
+        contractId: context.contractId,
+        unitId: context.unitId,
+      }
+
       if (!isConnected) {
-        return getCachedEmployees(context.contractId)
+        return getCachedEmployees(employeeScope)
       }
 
       try {
-        return await fetchEmployees({
-          contractId: context.contractId,
-          unitId: context.unitId,
-        })
+        return await fetchEmployees(employeeScope)
       } catch (error) {
-        const cached = await getCachedEmployees(context.contractId)
+        const cached = await getCachedEmployees(employeeScope)
         if (cached.length > 0) {
           return cached
         }

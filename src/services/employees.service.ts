@@ -7,12 +7,16 @@ type Scope = {
   unitId: string
 }
 
-function cacheKey(contractId: string) {
-  return `employees:${contractId}`
+function cacheKey(scope: Scope) {
+  return `employees:${scope.unitId}:${scope.contractId}`
 }
 
 export async function fetchEmployees(scope: Scope) {
   const data = await getAllPages<Employee>('/employees', {
+    params: {
+      unitId: scope.unitId,
+      contractId: scope.contractId,
+    },
     headers: {
       'X-Selected-Unit-Id': scope.unitId,
       'X-Selected-Contract-Id': scope.contractId,
@@ -20,11 +24,16 @@ export async function fetchEmployees(scope: Scope) {
     skipOrgScope: true,
   } as never)
 
-  const employees = data.filter((employee) => employee.active !== false)
-  await setReferenceCache(cacheKey(scope.contractId), employees)
+  const employees = data.filter(
+    (employee) =>
+      employee.active !== false &&
+      employee.unitId === scope.unitId &&
+      employee.contractId === scope.contractId,
+  )
+  await setReferenceCache(cacheKey(scope), employees)
   return employees
 }
 
-export async function getCachedEmployees(contractId: string) {
-  return (await getReferenceCache<Employee[]>(cacheKey(contractId))) ?? []
+export async function getCachedEmployees(scope: Scope) {
+  return (await getReferenceCache<Employee[]>(cacheKey(scope))) ?? []
 }

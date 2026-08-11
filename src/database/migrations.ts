@@ -73,6 +73,11 @@ export async function initializeDatabase() {
       description TEXT,
       scaffold_code TEXT,
       scaffold_description TEXT,
+      work_order_id TEXT,
+      work_order_code TEXT,
+      area_id TEXT,
+      area_code TEXT,
+      area_name TEXT,
       contract_id TEXT NOT NULL,
       unit_id TEXT NOT NULL,
       sync_status TEXT NOT NULL DEFAULT 'pending',
@@ -146,6 +151,11 @@ export async function initializeDatabase() {
         description TEXT,
         scaffold_code TEXT,
         scaffold_description TEXT,
+        work_order_id TEXT,
+        work_order_code TEXT,
+        area_id TEXT,
+        area_code TEXT,
+        area_name TEXT,
         contract_id TEXT NOT NULL,
         unit_id TEXT NOT NULL,
         sync_status TEXT NOT NULL DEFAULT 'pending',
@@ -177,14 +187,10 @@ export async function initializeDatabase() {
       ON local_scaffold_services (owner_tenant_id, owner_user_id, contract_id, unit_id);
   `)
 
-  const userVersion = await db.getFirstAsync<{ user_version: number }>(
-    'PRAGMA user_version',
-  )
+  const userVersion = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version')
   if ((userVersion?.user_version ?? 0) < 2) {
     await db.withExclusiveTransactionAsync(async (tx) => {
-      const columns = await tx.getAllAsync<{ name: string }>(
-        'PRAGMA table_info(outbox_items)',
-      )
+      const columns = await tx.getAllAsync<{ name: string }>('PRAGMA table_info(outbox_items)')
       const names = new Set(columns.map((column) => column.name))
       const additions = [
         ['idempotency_key', 'TEXT'],
@@ -221,6 +227,28 @@ export async function initializeDatabase() {
           );
         PRAGMA user_version = 2;
       `)
+    })
+  }
+
+  if ((userVersion?.user_version ?? 0) < 3) {
+    await db.withExclusiveTransactionAsync(async (tx) => {
+      const columns = await tx.getAllAsync<{ name: string }>(
+        'PRAGMA table_info(local_scaffold_services)',
+      )
+      const names = new Set(columns.map((column) => column.name))
+      const additions = [
+        ['work_order_id', 'TEXT'],
+        ['work_order_code', 'TEXT'],
+        ['area_id', 'TEXT'],
+        ['area_code', 'TEXT'],
+        ['area_name', 'TEXT'],
+      ] as const
+      for (const [name, type] of additions) {
+        if (!names.has(name)) {
+          await tx.execAsync(`ALTER TABLE local_scaffold_services ADD COLUMN ${name} ${type};`)
+        }
+      }
+      await tx.execAsync('PRAGMA user_version = 3;')
     })
   }
 

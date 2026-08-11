@@ -69,6 +69,7 @@ function normalizeEntry(value: object): CreateExecutionEntryDto {
     notes: entry.notes,
     crewId: entry.crewId,
     laborMode: entry.laborMode ?? (entry.crewId ? 'CREW' : 'UNASSIGNED'),
+    functionQuantities: entry.functionQuantities,
     memberEmployeeIds: entry.memberEmployeeIds ?? entry.crewMemberEmployeeIds,
     scaffoldComponentIds: entry.scaffoldComponentIds ?? entry.selectedScaffoldComponentIds,
     scaffoldComponentAdvances: entry.scaffoldComponentAdvances,

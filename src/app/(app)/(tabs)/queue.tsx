@@ -111,7 +111,6 @@ export default function QueuePage() {
     contractCode,
     contractDescription,
     contractPlantName,
-    crewName,
   } = useOperationalContextStore()
   const [mode, setMode] = useState<QueueMode | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -120,7 +119,12 @@ export default function QueuePage() {
   const [endDate, setEndDate] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('ALL')
+  const [plateFilter, setPlateFilter] = useState('')
+  const [workOrderFilter, setWorkOrderFilter] = useState('ALL')
+  const [areaFilter, setAreaFilter] = useState('ALL')
   const [statusPickerOpen, setStatusPickerOpen] = useState(false)
+  const [workOrderPickerOpen, setWorkOrderPickerOpen] = useState(false)
+  const [areaPickerOpen, setAreaPickerOpen] = useState(false)
   const [nativePickerState, setNativePickerState] = useState<NativePickerState | null>(null)
   const [iosPickerValue, setIosPickerValue] = useState(new Date())
 
@@ -180,14 +184,80 @@ export default function QueuePage() {
   )
 
   const items = useMemo(() => queueQuery.data ?? [], [queueQuery.data])
+  const workOrderOptions = useMemo<SelectionOption[]>(() => {
+    const options = new Map<string, SelectionOption>()
+    for (const item of items) {
+      if (item.workOrder) {
+        options.set(item.workOrder.id, {
+          value: item.workOrder.id,
+          label: item.workOrder.code,
+        })
+      }
+    }
+
+    return [
+      { value: 'ALL', label: 'Todas as ordens de serviço' },
+      ...[...options.values()].sort((left, right) => left.label.localeCompare(right.label)),
+    ]
+  }, [items])
+  const areaOptions = useMemo<SelectionOption[]>(() => {
+    const options = new Map<string, SelectionOption>()
+    for (const item of items) {
+      const area = item.scaffold?.area ?? item.scaffold?.areaRef ?? item.workOrder?.areaRef
+      if (area) {
+        options.set(area.id, {
+          value: area.id,
+          label: area.name,
+          sublabel: area.code ?? undefined,
+        })
+      }
+    }
+
+    return [
+      { value: 'ALL', label: 'Todas as áreas' },
+      ...[...options.values()].sort((left, right) => left.label.localeCompare(right.label)),
+    ]
+  }, [items])
+  const selectedWorkOrderLabel =
+    workOrderOptions.find((option) => option.value === workOrderFilter)?.label ??
+    'Todas as ordens de serviço'
+  const selectedAreaLabel =
+    areaOptions.find((option) => option.value === areaFilter)?.label ?? 'Todas as áreas'
   const activeMode: QueueMode = mode ?? (items.length > 0 ? 'backlog' : 'cronograma')
   const canRefreshQueue = Boolean(scope && isConnected && !isSyncing && !queueQuery.isFetching)
 
   const visibleItems = useMemo(() => {
     const normalizedSearch = searchValue.trim().toLowerCase()
+    const normalizedPlate = plateFilter.trim().toLowerCase()
     const scopedItems = scaffoldId ? items.filter((item) => item.scaffoldId === scaffoldId) : items
 
-    const quickFilteredItems = scopedItems.filter((item) => {
+    const specificFilteredItems = scopedItems.filter((item) => {
+      if (normalizedPlate && !item.scaffold?.code?.toLowerCase().includes(normalizedPlate)) {
+        return false
+      }
+
+      if (
+        workOrderFilter !== 'ALL' &&
+        item.workOrderId !== workOrderFilter &&
+        item.workOrder?.id !== workOrderFilter
+      ) {
+        return false
+      }
+
+      const itemAreaId =
+        item.scaffold?.areaId ??
+        item.scaffold?.area?.id ??
+        item.scaffold?.areaRef?.id ??
+        item.workOrder?.areaId ??
+        item.workOrder?.areaRef?.id
+      if (areaFilter !== 'ALL' && itemAreaId !== areaFilter) {
+        return false
+      }
+
+      return true
+    })
+
+    const quickFilteredItems = specificFilteredItems.filter((item) => {
       if (quickFilter === 'PENDING') {
         return item.status === 'NAO_INICIADO'
       }
@@ -233,7 +303,16 @@ export default function QueuePage() {
         .toLowerCase()
         .includes(normalizedSearch),
     )
-  }, [activeMode, items, quickFilter, scaffoldId, searchValue])
+  }, [
+    activeMode,
+    areaFilter,
+    items,
+    plateFilter,
+    quickFilter,
+    scaffoldId,
+    searchValue,
+    workOrderFilter,
+  ])
 
   const setFilterDateFromPicker = (field: DateFieldKey, date: Date) => {
     if (field === 'startDate') {
@@ -395,7 +474,7 @@ export default function QueuePage() {
                   <View style={styles.taskFooter}>
                     <View style={styles.metaPill}>
                       <Ionicons name="people-outline" size={13} color={colors.textMuted} />
-                      <Text style={styles.metaPillLabel}>{crewName ?? 'Equipe'}</Text>
+                      <Text style={styles.metaPillLabel}>Efetivo no lançamento</Text>
                     </View>
 
                     <View style={styles.metaPill}>
@@ -569,6 +648,70 @@ export default function QueuePage() {
                     </Text>
                   </Pressable>
                 ))}
+              </View>
+
+              <View style={styles.specificFilterShell}>
+                <View style={styles.filterDateInputWrap}>
+                  <Ionicons name="pricetag-outline" size={14} color={colors.textMuted} />
+                  <TextInput
+                    value={plateFilter}
+                    onChangeText={setPlateFilter}
+                    placeholder="Filtrar pela placa do andaime"
+                    placeholderTextColor="#A6B4BC"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    style={styles.filterDateInput}
+                  />
+                </View>
+
+                <Pressable
+                  onPress={() => {
+                    blurActiveElement()
+                    setWorkOrderPickerOpen(true)
+                  }}
+                  style={({ pressed }) => [
+                    styles.filterSelect,
+                    pressed ? styles.filterIconButtonPressed : null,
+                  ]}
+                >
+                  <Text style={styles.filterFieldValue} numberOfLines={1}>
+                    OS: {selectedWorkOrderLabel}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+                </Pressable>
+
+                <Pressable
+                  onPress={() => {
+                    blurActiveElement()
+                    setAreaPickerOpen(true)
+                  }}
+                  style={({ pressed }) => [
+                    styles.filterSelect,
+                    pressed ? styles.filterIconButtonPressed : null,
+                  ]}
+                >
+                  <Text style={styles.filterFieldValue} numberOfLines={1}>
+                    Área: {selectedAreaLabel}
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+                </Pressable>
+
+                {plateFilter || workOrderFilter !== 'ALL' || areaFilter !== 'ALL' ? (
+                  <Pressable
+                    onPress={() => {
+                      setPlateFilter('')
+                      setWorkOrderFilter('ALL')
+                      setAreaFilter('ALL')
+                    }}
+                    style={({ pressed }) => [
+                      styles.filterClearButton,
+                      pressed ? styles.filterIconButtonPressed : null,
+                    ]}
+                  >
+                    <Ionicons name="close-circle-outline" size={14} color={colors.primaryStrong} />
+                    <Text style={styles.filterClearLabel}>Limpar placa, OS e área</Text>
+                  </Pressable>
+                ) : null}
               </View>
 
               {activeMode === 'cronograma' ? (
@@ -780,6 +923,26 @@ export default function QueuePage() {
         selectedValue={statusFilter}
         onSelect={(value) => setStatusFilter(value as StatusFilter)}
         onClose={() => setStatusPickerOpen(false)}
+      />
+
+      <SelectionModal
+        visible={workOrderPickerOpen}
+        title="Ordem de serviço"
+        subtitle="A lista vem da fila disponível neste contrato, inclusive offline."
+        options={workOrderOptions}
+        selectedValue={workOrderFilter}
+        onSelect={setWorkOrderFilter}
+        onClose={() => setWorkOrderPickerOpen(false)}
+      />
+
+      <SelectionModal
+        visible={areaPickerOpen}
+        title="Área operacional"
+        subtitle="Filtre os andaimes pela área cadastrada."
+        options={areaOptions}
+        selectedValue={areaFilter}
+        onSelect={setAreaFilter}
+        onClose={() => setAreaPickerOpen(false)}
       />
     </SafeAreaView>
   )
@@ -998,6 +1161,15 @@ const styles = StyleSheet.create({
   filterShell: {
     gap: spacing.sm,
     marginBottom: spacing.sm,
+  },
+  specificFilterShell: {
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#E7ECEF',
+    backgroundColor: '#FBFCFD',
   },
   filterField: {
     minHeight: 42,

@@ -39,6 +39,17 @@ function newAdjustment(plannedUnit: MeasurementUnit): ExecutionMeasurementAdjust
   }
 }
 
+function normalizeDecimalInput(value: string) {
+  const sanitized = value.replace(',', '.').replace(/[^0-9.]/g, '')
+  const separatorIndex = sanitized.indexOf('.')
+
+  if (separatorIndex < 0) return sanitized
+
+  const integer = sanitized.slice(0, separatorIndex) || '0'
+  const decimal = sanitized.slice(separatorIndex + 1).replaceAll('.', '')
+  return `${integer}.${decimal}`
+}
+
 export function ExecutionMeasurementAdjustmentSection({
   plannedUnit,
   components,
@@ -48,6 +59,7 @@ export function ExecutionMeasurementAdjustmentSection({
   onChange,
 }: Props) {
   const [componentDraftId, setComponentDraftId] = useState<string | null>(null)
+  const [quantityInputs, setQuantityInputs] = useState<Record<string, string>>({})
   const componentOptions: SelectionOption[] = components.map((component) => ({
     value: component.id,
     label: `${component.lineCode} · ${component.name}`,
@@ -164,12 +176,20 @@ export function ExecutionMeasurementAdjustmentSection({
                   <View style={styles.quantityField}>
                     <Text style={styles.label}>Quantidade</Text>
                     <TextInput
-                      value={adjustment.quantity > 0 ? String(adjustment.quantity) : ''}
-                      onChangeText={(value) =>
-                        update(adjustment.localId, {
-                          quantity: Number(value.replace(',', '.')) || 0,
-                        })
+                      value={
+                        quantityInputs[adjustment.localId] ??
+                        (adjustment.quantity > 0 ? String(adjustment.quantity) : '')
                       }
+                      onChangeText={(value) => {
+                        const normalized = normalizeDecimalInput(value)
+                        setQuantityInputs((current) => ({
+                          ...current,
+                          [adjustment.localId]: normalized,
+                        }))
+                        update(adjustment.localId, {
+                          quantity: Number(normalized) || 0,
+                        })
+                      }}
                       keyboardType="decimal-pad"
                       placeholder="0,00"
                       placeholderTextColor="#8AA0A8"
@@ -180,6 +200,11 @@ export function ExecutionMeasurementAdjustmentSection({
                     <Text style={styles.unitLabel}>{adjustment.measurementUnit}</Text>
                   </View>
                 </View>
+                <Text style={styles.unitHelper}>
+                  {adjustment.scope === 'COMPONENT'
+                    ? 'Unidade definida no cadastro do componente.'
+                    : 'Unidade definida pela medição do andaime.'}
+                </Text>
 
                 <Text style={styles.label}>Motivo</Text>
                 <TextInput
@@ -284,6 +309,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   unitLabel: { color: colors.primaryStrong, fontSize: 12, fontWeight: '800' },
+  unitHelper: { color: colors.textMuted, fontSize: 10, lineHeight: 15 },
   addButton: {
     minHeight: 42,
     borderRadius: 21,

@@ -31,6 +31,7 @@ import { useCrews } from '@/hooks/use-crews'
 import { useQueueServiceDetail } from '@/hooks/use-queue-service-detail'
 import { useScaffoldComponents } from '@/hooks/use-scaffold-components'
 import { fetchEmployees, getCachedEmployees } from '@/services/employees.service'
+import { fetchWorkFunctions, getCachedWorkFunctions } from '@/services/work-functions.service'
 import { useAuthStore } from '@/store/auth-store'
 import { useConnectivityStore } from '@/store/connectivity-store'
 import { useOperationalContextStore } from '@/store/operational-context-store'
@@ -41,6 +42,8 @@ import {
   type CreateExecutionEntryDto,
   type ExecutionComponentAdvanceInput,
   type ExecutionEvidenceDraft,
+  type ExecutionFunctionQuantityInput,
+  type ExecutionLaborMode,
   type ExecutionMeasurementAdjustmentDraft,
   type QueuedExecutionEntryPayload,
 } from '@/types/execution'
@@ -64,12 +67,13 @@ import {
   getVisibleMeasurementDimensions,
   normalizeMeasuredDimensions,
 } from '@/utils/execution'
+import { buildInheritedComponentAdvances } from '@/utils/component-advances'
 import { getErrorMessage } from '@/utils/error'
 import { blurActiveElement } from '@/utils/focus'
 import { createLocalId } from '@/utils/id'
 import { normalizeQueuedExecutionPayload } from '@/utils/queued-execution'
 
-type PickerKey = 'crew' | 'members' | null
+type PickerKey = 'crew' | 'members' | 'functions' | null
 type EntryMode = 'PERCENTUAL' | 'QUANTIDADE'
 type QuantityMode = 'direct' | 'dimensions'
 type ExecutionFormStep = 'ENTRY' | 'FINALIZE'
@@ -225,7 +229,7 @@ export default function ExecuteServicePage() {
   }>()
   const user = useAuthStore((state) => state.user)
   const isConnected = useConnectivityStore((state) => state.isConnected)
-  const { contractId, unitId, crewId, crewName, teamMembers } = useOperationalContextStore()
+  const { contractId, unitId } = useOperationalContextStore()
   const runSyncNow = useSyncStore((state) => state.runSyncNow)
   const refreshState = useSyncStore((state) => state.refreshState)
   const [activePicker, setActivePicker] = useState<PickerKey>(null)
@@ -235,7 +239,7 @@ export default function ExecuteServicePage() {
   const [rosterExpanded, setRosterExpanded] = useState(false)
   const [formStep, setFormStep] = useState<ExecutionFormStep>('ENTRY')
   const scrollViewRef = useRef<ScrollView>(null)
-  const lastCrewRef = useRef<string | null>(crewId)
+  const lastCrewRef = useRef<string | null>(null)
 
   const serviceQuery = useQueueServiceDetail(serviceId ?? null, { contractId, unitId }, isConnected)
   const service = serviceQuery.data
@@ -259,10 +263,10 @@ export default function ExecuteServicePage() {
   const [endDate, setEndDate] = useState(formatDate(new Date()))
   const [endTime, setEndTime] = useState(formatTime(new Date()))
   const [notes, setNotes] = useState('')
-  const [selectedCrewId, setSelectedCrewId] = useState(crewId ?? '')
-  const [selectedMemberIds, setSelectedMemberIds] = useState(
-    teamMembers.map((member) => member.employeeId),
-  )
+  const [laborMode, setLaborMode] = useState<ExecutionLaborMode>('UNASSIGNED')
+  const [selectedCrewId, setSelectedCrewId] = useState('')
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
+  const [functionQuantities, setFunctionQuantities] = useState<ExecutionFunctionQuantityInput[]>([])
   const [componentAdvances, setComponentAdvances] = useState<ExecutionComponentAdvanceInput[]>([])
   const [hasMeasurementAdjustments, setHasMeasurementAdjustments] = useState(false)
   const [measurementAdjustments, setMeasurementAdjustments] = useState<
@@ -271,6 +275,8 @@ export default function ExecuteServicePage() {
   const [evidenceCaption, setEvidenceCaption] = useState('')
   const [evidenceDrafts, setEvidenceDrafts] = useState<ExecutionEvidenceDraft[]>([])
   const hydratedDraftRef = useRef<string | null>(null)
+  const componentSelectionContextRef = useRef<string | null>(null)
+  const componentSelectionInitializedRef = useRef(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const updateDateTimeField = (field: DateTimeFieldKey, value: Date) => {
@@ -362,18 +368,39 @@ export default function ExecuteServicePage() {
         return []
       }
 
+      const employeeScope = { contractId, unitId }
+
       if (!isConnected) {
-        return getCachedEmployees(contractId)
+        return getCachedEmployees(employeeScope)
       }
 
       try {
-        return await fetchEmployees({ contractId, unitId })
+        return await fetchEmployees(employeeScope)
       } catch (error) {
-        const cached = await getCachedEmployees(contractId)
+        const cached = await getCachedEmployees(employeeScope)
         if (cached.length > 0) {
           return cached
         }
 
+        throw error
+      }
+    },
+  })
+
+  const workFunctionsQuery = useQuery({
+    queryKey: ['execute-work-functions', contractId, unitId, isConnected],
+    enabled: Boolean(contractId && unitId),
+    queryFn: async () => {
+      if (!contractId || !unitId) return []
+
+      const workFunctionScope = { contractId, unitId }
+      if (!isConnected) return getCachedWorkFunctions(workFunctionScope)
+
+      try {
+        return await fetchWorkFunctions(workFunctionScope)
+      } catch (error) {
+        const cached = await getCachedWorkFunctions(workFunctionScope)
+        if (cached.length > 0) return cached
         throw error
       }
     },
@@ -417,6 +444,26 @@ export default function ExecuteServicePage() {
         })),
     [employeesQuery.data, selectedMemberIds],
   )
+
+  const workFunctionOptions: SelectionOption[] = useMemo(
+    () =>
+      (workFunctionsQuery.data ?? []).map((workFunction) => ({
+        value: workFunction.id,
+        label: workFunction.name,
+        sublabel: workFunction.code,
+        caption: workFunction.description ?? undefined,
+      })),
+    [workFunctionsQuery.data],
+  )
+
+  useEffect(() => {
+    const contextKey = service ? `${service.id}:${draftLocalId ?? 'new'}` : null
+    if (!contextKey || componentSelectionContextRef.current === contextKey) return
+
+    componentSelectionContextRef.current = contextKey
+    componentSelectionInitializedRef.current = false
+    if (!draftLocalId) setComponentAdvances([])
+  }, [draftLocalId, service])
 
   useEffect(() => {
     if (!service || draftLocalId) {
@@ -498,8 +545,10 @@ export default function ExecuteServicePage() {
       setEndDate(hydratedEnd.date)
       setEndTime(hydratedEnd.time)
       setNotes(payload.notes ?? '')
-      setSelectedCrewId(payload.crewId ?? crewId ?? '')
+      setLaborMode(payload.laborMode ?? (payload.crewId ? 'CREW' : 'UNASSIGNED'))
+      setSelectedCrewId(payload.crewId ?? '')
       setSelectedMemberIds(payload.memberEmployeeIds ?? [])
+      setFunctionQuantities(payload.functionQuantities ?? [])
       setComponentAdvances(
         payload.scaffoldComponentAdvances ??
           (payload.scaffoldComponentIds ?? []).map((scaffoldComponentId) => ({
@@ -508,6 +557,7 @@ export default function ExecuteServicePage() {
             inputValue: payload.inputValue,
           })),
       )
+      componentSelectionInitializedRef.current = true
       setMeasurementAdjustments(normalizedPayload.adjustments ?? [])
       setHasMeasurementAdjustments(Boolean(normalizedPayload.adjustments?.length))
       setEvidenceCaption(normalizedPayload.evidenceCaption ?? '')
@@ -518,7 +568,7 @@ export default function ExecuteServicePage() {
     return () => {
       active = false
     }
-  }, [crewId, draftLocalId])
+  }, [draftLocalId])
 
   const calculatedDimensionsValue = useMemo(() => {
     if (!service) {
@@ -567,11 +617,50 @@ export default function ExecuteServicePage() {
     return Number(resolvedInputValue.toFixed(3))
   }, [entryMode, resolvedInputValue, service])
 
+  const handleEntryModeChange = (value: EntryMode) => {
+    setEntryMode(value)
+    setComponentAdvances([])
+    componentSelectionInitializedRef.current = value === 'QUANTIDADE'
+  }
+
+  useEffect(() => {
+    if (
+      componentSelectionInitializedRef.current ||
+      !service ||
+      service.scaffoldComponent ||
+      draftLocalId ||
+      resolvedInputType !== ExecutionInputType.PERCENTUAL ||
+      resolvedInputValue <= 0 ||
+      scaffoldComponentsQuery.data === undefined ||
+      scaffoldComponentsQuery.data.length === 0 ||
+      (service.type !== 'MONTAGEM' && service.type !== 'DESMONTAGEM')
+    ) {
+      return
+    }
+
+    setComponentAdvances(
+      buildInheritedComponentAdvances(
+        scaffoldComponentsQuery.data,
+        service.type,
+        resolvedInputType,
+        resolvedInputValue,
+      ),
+    )
+    componentSelectionInitializedRef.current = true
+  }, [draftLocalId, resolvedInputType, resolvedInputValue, scaffoldComponentsQuery.data, service])
+
   const manHours = useMemo(() => {
     const startDateTime = parseDateTimeInput(startDate, startTime)
     const endDateTime = parseDateTimeInput(endDate, endTime)
 
-    if (!startDateTime || !endDateTime || !selectedMemberIds.length) {
+    const effectiveCount =
+      laborMode === 'CREW'
+        ? selectedMemberIds.length
+        : laborMode === 'FUNCTION_QUANTITY'
+          ? functionQuantities.reduce((total, item) => total + item.quantity, 0)
+          : 0
+
+    if (!startDateTime || !endDateTime || effectiveCount <= 0) {
       return 0
     }
 
@@ -581,20 +670,36 @@ export default function ExecuteServicePage() {
       return 0
     }
 
-    return Number((diffHours * selectedMemberIds.length).toFixed(2))
-  }, [endDate, endTime, selectedMemberIds.length, startDate, startTime])
+    return Number((diffHours * effectiveCount).toFixed(2))
+  }, [
+    endDate,
+    endTime,
+    functionQuantities,
+    laborMode,
+    selectedMemberIds.length,
+    startDate,
+    startTime,
+  ])
 
   const getExecutionValidationError = () => {
     if (!service || !scope) {
       return 'Serviço não encontrado para registrar o avanço.'
     }
 
-    if (!selectedCrewId) {
+    if (laborMode === 'CREW' && !selectedCrewId) {
       return 'Selecione a equipe de referência.'
     }
 
-    if (selectedMemberIds.length === 0) {
+    if (laborMode === 'CREW' && selectedMemberIds.length === 0) {
       return 'Selecione ao menos um integrante para esta execução.'
+    }
+
+    if (
+      laborMode === 'FUNCTION_QUANTITY' &&
+      (functionQuantities.length === 0 ||
+        functionQuantities.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1))
+    ) {
+      return 'Informe ao menos uma função com efetivo inteiro maior que zero.'
     }
 
     if (service.type !== 'MONTAGEM' && service.type !== 'DESMONTAGEM') {
@@ -681,11 +786,7 @@ export default function ExecuteServicePage() {
       return
     }
 
-    if (
-      !service ||
-      !scope ||
-      (service.type !== 'MONTAGEM' && service.type !== 'DESMONTAGEM')
-    ) {
+    if (!service || !scope || (service.type !== 'MONTAGEM' && service.type !== 'DESMONTAGEM')) {
       setSubmitError('Serviço não encontrado para registrar o avanço.')
       return
     }
@@ -703,9 +804,11 @@ export default function ExecuteServicePage() {
         startTime: toIsoFromDateTime(startDate, startTime),
         endTime: toIsoFromDateTime(endDate, endTime),
         notes: notes.trim() || undefined,
-        laborMode: 'CREW',
-        crewId: selectedCrewId,
-        memberEmployeeIds: selectedMemberIds.length > 0 ? selectedMemberIds : undefined,
+        laborMode,
+        crewId: laborMode === 'CREW' ? selectedCrewId : undefined,
+        memberEmployeeIds:
+          laborMode === 'CREW' && selectedMemberIds.length > 0 ? selectedMemberIds : undefined,
+        functionQuantities: laborMode === 'FUNCTION_QUANTITY' ? functionQuantities : undefined,
         scaffoldComponentAdvances:
           !service.scaffoldComponent && componentAdvances.length > 0
             ? componentAdvances
@@ -910,7 +1013,7 @@ export default function ExecuteServicePage() {
                     >
                       <SegmentedControl
                         value={entryMode}
-                        onChange={(value) => setEntryMode(value)}
+                        onChange={handleEntryModeChange}
                         options={[
                           { value: 'PERCENTUAL', label: 'Percentual' },
                           { value: 'QUANTIDADE', label: 'Quantidade' },
@@ -1015,97 +1118,165 @@ export default function ExecuteServicePage() {
                     </FormSection>
 
                     <FormSection
-                      title="Equipe"
-                      subtitle="Defina a equipe usada neste lançamento e ajuste a composição se necessário."
+                      title="Efetivo da execução"
+                      subtitle="Escolha a composição apenas para este lançamento, como no sistema web."
                     >
-                      <SelectTrigger
-                        label="Equipe"
-                        value={selectedCrew?.name ?? crewName}
-                        placeholder="Selecionar equipe"
-                        helper={
-                          selectedCrew
-                            ? `${selectedCrew.members?.length ?? 0} integrante(s) • ${
-                                selectedCrew.foreman?.name ?? 'Sem encarregado'
-                              }`
-                            : 'Escolha a equipe base deste lançamento.'
-                        }
-                        onPress={() => setActivePicker('crew')}
+                      <SegmentedControl
+                        value={laborMode}
+                        onChange={setLaborMode}
+                        options={[
+                          { value: 'CREW', label: 'Equipe' },
+                          { value: 'FUNCTION_QUANTITY', label: 'Efetivo' },
+                          { value: 'UNASSIGNED', label: 'Sem efetivo' },
+                        ]}
                       />
 
-                      {selectedCrew ? (
-                        <View style={styles.crewCard}>
-                          <View style={styles.crewCardText}>
-                            <Text style={styles.crewCardTitle}>{selectedCrew.name}</Text>
-                            <Text style={styles.crewCardMeta}>
-                              {selectedMemberIds.length} integrante(s) nesta execução
-                            </Text>
-                            <Text style={styles.crewCardMeta}>
-                              HH estimado: {manHours.toFixed(2)}
-                            </Text>
-                          </View>
+                      {laborMode === 'CREW' ? (
+                        <>
+                          <SelectTrigger
+                            label="Equipe"
+                            value={selectedCrew?.name}
+                            placeholder="Selecionar equipe"
+                            helper={
+                              selectedCrew
+                                ? `${selectedCrew.members?.length ?? 0} integrante(s) • ${
+                                    selectedCrew.foreman?.name ?? 'Sem encarregado'
+                                  }`
+                                : 'Escolha a equipe base deste lançamento.'
+                            }
+                            onPress={() => setActivePicker('crew')}
+                          />
 
-                          <View style={styles.crewActions}>
-                            <Pressable
-                              onPress={() => setRosterExpanded((current) => !current)}
-                              style={({ pressed }) => [
-                                styles.ghostButton,
-                                pressed ? styles.ghostButtonPressed : null,
-                              ]}
-                            >
-                              <Ionicons
-                                name={rosterExpanded ? 'chevron-up-outline' : 'people-outline'}
-                                size={15}
-                                color={colors.primaryStrong}
-                              />
-                              <Text style={styles.ghostButtonLabel}>Integrantes</Text>
-                            </Pressable>
+                          {selectedCrew ? (
+                            <View style={styles.crewCard}>
+                              <View style={styles.crewCardText}>
+                                <Text style={styles.crewCardTitle}>{selectedCrew.name}</Text>
+                                <Text style={styles.crewCardMeta}>
+                                  {selectedMemberIds.length} integrante(s) nesta execução
+                                </Text>
+                                <Text style={styles.crewCardMeta}>
+                                  HH estimado: {manHours.toFixed(2)}
+                                </Text>
+                              </View>
 
-                            <Pressable
-                              onPress={() => setActivePicker('members')}
-                              disabled={!availableEmployeeOptions.length}
-                              style={({ pressed }) => [
-                                styles.circleAction,
-                                !availableEmployeeOptions.length
-                                  ? styles.circleActionDisabled
-                                  : null,
-                                pressed && availableEmployeeOptions.length
-                                  ? styles.circleActionPressed
-                                  : null,
-                              ]}
-                            >
-                              <Ionicons name="add" size={16} color={colors.white} />
-                            </Pressable>
-                          </View>
-                        </View>
-                      ) : null}
-
-                      {rosterExpanded ? (
-                        <View style={styles.memberList}>
-                          {selectedEmployees.length === 0 ? (
-                            <View style={styles.inlineEmptyState}>
-                              <Text style={styles.inlineEmptyTitle}>
-                                Sem integrantes selecionados
-                              </Text>
-                              <Text style={styles.inlineEmptyDescription}>
-                                Adicione pessoas manualmente se a composição em campo mudou.
-                              </Text>
-                            </View>
-                          ) : (
-                            selectedEmployees.map((employee) => (
-                              <View key={employee.id} style={styles.memberRow}>
-                                <View style={styles.memberInfo}>
-                                  <Text style={styles.memberName}>{employee.name}</Text>
-                                  <Text style={styles.memberMeta}>
-                                    {[employee.registrationCode, employee.role]
-                                      .filter(Boolean)
-                                      .join(' • ') || 'Sem detalhes adicionais'}
-                                  </Text>
-                                </View>
+                              <View style={styles.crewActions}>
+                                <Pressable
+                                  onPress={() => setRosterExpanded((current) => !current)}
+                                  style={({ pressed }) => [
+                                    styles.ghostButton,
+                                    pressed ? styles.ghostButtonPressed : null,
+                                  ]}
+                                >
+                                  <Ionicons
+                                    name={rosterExpanded ? 'chevron-up-outline' : 'people-outline'}
+                                    size={15}
+                                    color={colors.primaryStrong}
+                                  />
+                                  <Text style={styles.ghostButtonLabel}>Integrantes</Text>
+                                </Pressable>
 
                                 <Pressable
+                                  onPress={() => setActivePicker('members')}
+                                  disabled={!availableEmployeeOptions.length}
+                                  style={({ pressed }) => [
+                                    styles.circleAction,
+                                    !availableEmployeeOptions.length
+                                      ? styles.circleActionDisabled
+                                      : null,
+                                    pressed && availableEmployeeOptions.length
+                                      ? styles.circleActionPressed
+                                      : null,
+                                  ]}
+                                >
+                                  <Ionicons name="add" size={16} color={colors.white} />
+                                </Pressable>
+                              </View>
+                            </View>
+                          ) : null}
+
+                          {rosterExpanded ? (
+                            <View style={styles.memberList}>
+                              {selectedEmployees.length === 0 ? (
+                                <View style={styles.inlineEmptyState}>
+                                  <Text style={styles.inlineEmptyTitle}>
+                                    Sem integrantes selecionados
+                                  </Text>
+                                  <Text style={styles.inlineEmptyDescription}>
+                                    Adicione pessoas se a composição em campo mudou.
+                                  </Text>
+                                </View>
+                              ) : (
+                                selectedEmployees.map((employee) => (
+                                  <View key={employee.id} style={styles.memberRow}>
+                                    <View style={styles.memberInfo}>
+                                      <Text style={styles.memberName}>{employee.name}</Text>
+                                      <Text style={styles.memberMeta}>
+                                        {[employee.registrationCode, employee.role]
+                                          .filter(Boolean)
+                                          .join(' • ') || 'Sem detalhes adicionais'}
+                                      </Text>
+                                    </View>
+
+                                    <Pressable
+                                      onPress={() =>
+                                        setSelectedMemberIds((current) =>
+                                          current.filter((item) => item !== employee.id),
+                                        )
+                                      }
+                                      style={({ pressed }) => [
+                                        styles.memberRemoveButton,
+                                        pressed ? styles.memberRemoveButtonPressed : null,
+                                      ]}
+                                    >
+                                      <Ionicons name="close" size={14} color={colors.danger} />
+                                    </Pressable>
+                                  </View>
+                                ))
+                              )}
+                            </View>
+                          ) : null}
+                        </>
+                      ) : null}
+
+                      {laborMode === 'FUNCTION_QUANTITY' ? (
+                        <View style={styles.memberList}>
+                          {functionQuantities.map((item) => {
+                            const workFunction = (workFunctionsQuery.data ?? []).find(
+                              (candidate) => candidate.id === item.workFunctionId,
+                            )
+                            return (
+                              <View key={item.workFunctionId} style={styles.memberRow}>
+                                <View style={styles.memberInfo}>
+                                  <Text style={styles.memberName}>
+                                    {workFunction?.name ?? 'Função operacional'}
+                                  </Text>
+                                  <Text style={styles.memberMeta}>
+                                    {workFunction?.code ?? 'Função cadastrada'}
+                                  </Text>
+                                </View>
+                                <TextInput
+                                  value={String(item.quantity)}
+                                  onChangeText={(value) => {
+                                    const quantity = Number(value.replace(/\D/g, '')) || 0
+                                    setFunctionQuantities((current) =>
+                                      current.map((currentItem) =>
+                                        currentItem.workFunctionId === item.workFunctionId
+                                          ? { ...currentItem, quantity }
+                                          : currentItem,
+                                      ),
+                                    )
+                                  }}
+                                  keyboardType="number-pad"
+                                  selectTextOnFocus
+                                  style={styles.functionQuantityInput}
+                                />
+                                <Pressable
                                   onPress={() =>
-                                    setSelectedMemberIds((current) =>
-                                      current.filter((item) => item !== employee.id),
+                                    setFunctionQuantities((current) =>
+                                      current.filter(
+                                        (currentItem) =>
+                                          currentItem.workFunctionId !== item.workFunctionId,
+                                      ),
                                     )
                                   }
                                   style={({ pressed }) => [
@@ -1116,8 +1287,33 @@ export default function ExecuteServicePage() {
                                   <Ionicons name="close" size={14} color={colors.danger} />
                                 </Pressable>
                               </View>
-                            ))
-                          )}
+                            )
+                          })}
+
+                          <Pressable
+                            onPress={() => setActivePicker('functions')}
+                            style={({ pressed }) => [
+                              styles.ghostButton,
+                              pressed ? styles.ghostButtonPressed : null,
+                            ]}
+                          >
+                            <Ionicons name="add" size={15} color={colors.primaryStrong} />
+                            <Text style={styles.ghostButtonLabel}>Adicionar funções</Text>
+                          </Pressable>
+                          <Text style={styles.mutedText}>
+                            Efetivo total:{' '}
+                            {functionQuantities.reduce((total, item) => total + item.quantity, 0)} •
+                            HH estimado: {manHours.toFixed(2)}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {laborMode === 'UNASSIGNED' ? (
+                        <View style={styles.inlineEmptyState}>
+                          <Text style={styles.inlineEmptyTitle}>Execução sem efetivo</Text>
+                          <Text style={styles.inlineEmptyDescription}>
+                            O avanço será salvo sem equipe, pessoas ou quantitativo por função.
+                          </Text>
                         </View>
                       ) : null}
                     </FormSection>
@@ -1126,7 +1322,7 @@ export default function ExecuteServicePage() {
                     (service.type === 'MONTAGEM' || service.type === 'DESMONTAGEM') ? (
                       <FormSection
                         title="Componentes"
-                        subtitle="Informe o avanço individual quando houver rastreio detalhado."
+                        subtitle="Por padrão, os componentes com saldo acompanham o percentual do andaime."
                       >
                         <ExecutionComponentAdvanceSection
                           components={scaffoldComponentsQuery.data ?? []}
@@ -1410,6 +1606,28 @@ export default function ExecuteServicePage() {
         }
         onClose={() => setActivePicker(null)}
         confirmLabel="Adicionar ao avanço"
+      />
+
+      <SelectionModal
+        visible={activePicker === 'functions'}
+        title="Funções do efetivo"
+        subtitle="Informe depois a quantidade de pessoas em cada função."
+        options={workFunctionOptions}
+        multiple
+        selectedValues={functionQuantities.map((item) => item.workFunctionId)}
+        onConfirm={(values) =>
+          setFunctionQuantities((current) =>
+            values.map(
+              (workFunctionId) =>
+                current.find((item) => item.workFunctionId === workFunctionId) ?? {
+                  workFunctionId,
+                  quantity: 1,
+                },
+            ),
+          )
+        }
+        onClose={() => setActivePicker(null)}
+        confirmLabel="Usar funções"
       />
     </SafeAreaView>
   )
@@ -1879,6 +2097,18 @@ const styles = StyleSheet.create({
   },
   memberRemoveButtonPressed: {
     opacity: 0.86,
+  },
+  functionQuantityInput: {
+    width: 58,
+    minHeight: 38,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   inlineEmptyState: {
     borderRadius: radius.md,

@@ -16,8 +16,7 @@ export const ScaffoldServiceType = {
   MODIFICACAO: 'MODIFICACAO',
 } as const
 
-export type ScaffoldServiceType =
-  (typeof ScaffoldServiceType)[keyof typeof ScaffoldServiceType]
+export type ScaffoldServiceType = (typeof ScaffoldServiceType)[keyof typeof ScaffoldServiceType]
 
 export const MeasurementUnit = {
   M3: 'M3',
@@ -44,6 +43,17 @@ export type QueueServiceItem = {
   scaffold?: {
     id: string
     code: string
+    areaId?: string | null
+    areaRef?: {
+      id: string
+      code?: string | null
+      name: string
+    } | null
+    area?: {
+      id: string
+      code?: string | null
+      name: string
+    } | null
     description?: string | null
     location?: string | null
     height?: number | null
@@ -58,6 +68,12 @@ export type QueueServiceItem = {
   workOrder?: {
     id: string
     code: string
+    areaId?: string | null
+    areaRef?: {
+      id: string
+      code?: string | null
+      name: string
+    } | null
   } | null
   scaffoldComponent?: {
     id: string

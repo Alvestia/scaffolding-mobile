@@ -27,8 +27,10 @@ import { colors, radius, spacing } from '@/constants/theme'
 import { outboxRepository } from '@/database/repositories/outbox-repository'
 import { useQuery } from '@tanstack/react-query'
 import { useDeviationTypes } from '@/hooks/use-deviation-types'
+import { useCrews } from '@/hooks/use-crews'
 import { createOperationalDeviation } from '@/services/operational-deviations.service'
 import { fetchEmployees, getCachedEmployees } from '@/services/employees.service'
+import { fetchWorkFunctions, getCachedWorkFunctions } from '@/services/work-functions.service'
 import {
   cleanupDeviationEvidenceDrafts,
   uploadDeviationMedia,
@@ -43,6 +45,7 @@ import {
   type OperationalDeviationDraft,
 } from '@/types/operational-deviation'
 import { OutboxEntityType, SyncStatus } from '@/types/sync'
+import type { ExecutionFunctionQuantityInput, ExecutionLaborMode } from '@/types/execution'
 import {
   dateInputToIsoDate,
   formatDate,
@@ -57,7 +60,7 @@ import { getErrorMessage } from '@/utils/error'
 import { blurActiveElement } from '@/utils/focus'
 import { createLocalId } from '@/utils/id'
 
-type PickerKey = 'deviationType' | 'members' | null
+type PickerKey = 'deviationType' | 'crew' | 'members' | 'functions' | null
 type DateTimeFieldKey = 'occurredDate' | 'occurredTime' | 'resolvedDate' | 'resolvedTime'
 type NativePickerState = { field: DateTimeFieldKey; mode: 'date' | 'time' }
 
@@ -125,8 +128,7 @@ function SelectTrigger({
 
 export default function DeviationsPage() {
   const isConnected = useConnectivityStore((state) => state.isConnected)
-  const { companyId, contractId, unitId, crewId, crewName, teamMembers } =
-    useOperationalContextStore()
+  const { companyId, contractId, unitId } = useOperationalContextStore()
   const runSyncNow = useSyncStore((state) => state.runSyncNow)
   const refreshState = useSyncStore((state) => state.refreshState)
   const scrollViewRef = useRef<ScrollView>(null)
@@ -144,10 +146,12 @@ export default function DeviationsPage() {
   const [occurredTime, setOccurredTime] = useState(formatTime(new Date()))
   const [resolvedDate, setResolvedDate] = useState(formatDate(new Date()))
   const [resolvedTime, setResolvedTime] = useState(formatTime(new Date()))
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>(
-    teamMembers.map((member) => member.employeeId),
-  )
+  const [laborMode, setLaborMode] = useState<ExecutionLaborMode>('UNASSIGNED')
+  const [selectedCrewId, setSelectedCrewId] = useState('')
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
+  const [functionQuantities, setFunctionQuantities] = useState<ExecutionFunctionQuantityInput[]>([])
   const [rosterExpanded, setRosterExpanded] = useState(true)
+  const lastCrewRef = useRef<string | null>(null)
   const [notes, setNotes] = useState('')
   const [evidences, setEvidences] = useState<DeviationEvidenceDraft[]>([])
   const [evidenceCaption, setEvidenceCaption] = useState('')
@@ -156,7 +160,7 @@ export default function DeviationsPage() {
   const [nativePickerState, setNativePickerState] = useState<NativePickerState | null>(null)
   const [iosPickerValue, setIosPickerValue] = useState(new Date())
 
-  const scopeReady = Boolean(companyId && contractId && unitId && crewId)
+  const scopeReady = Boolean(companyId && contractId && unitId)
 
   const employeesQuery = useQuery({
     queryKey: ['deviation-employees', contractId, unitId, isConnected],
@@ -166,14 +170,16 @@ export default function DeviationsPage() {
         return []
       }
 
+      const employeeScope = { contractId, unitId }
+
       if (!isConnected) {
-        return getCachedEmployees(contractId)
+        return getCachedEmployees(employeeScope)
       }
 
       try {
-        return await fetchEmployees({ contractId, unitId })
+        return await fetchEmployees(employeeScope)
       } catch (error) {
-        const cached = await getCachedEmployees(contractId)
+        const cached = await getCachedEmployees(employeeScope)
         if (cached.length > 0) {
           return cached
         }
@@ -183,9 +189,34 @@ export default function DeviationsPage() {
     },
   })
 
+  const crewsQuery = useCrews({ contractId, unitId })
+  const workFunctionsQuery = useQuery({
+    queryKey: ['deviation-work-functions', contractId, unitId, isConnected],
+    enabled: Boolean(contractId && unitId),
+    queryFn: async () => {
+      if (!contractId || !unitId) return []
+
+      const workFunctionScope = { contractId, unitId }
+      if (!isConnected) return getCachedWorkFunctions(workFunctionScope)
+
+      try {
+        return await fetchWorkFunctions(workFunctionScope)
+      } catch (error) {
+        const cached = await getCachedWorkFunctions(workFunctionScope)
+        if (cached.length > 0) return cached
+        throw error
+      }
+    },
+  })
+
   useEffect(() => {
-    setSelectedMemberIds(teamMembers.map((member) => member.employeeId))
-  }, [crewId, teamMembers])
+    if (!selectedCrewId || lastCrewRef.current === selectedCrewId) return
+    const crew = (crewsQuery.data ?? []).find((item) => item.id === selectedCrewId)
+    if (!crew) return
+
+    setSelectedMemberIds((crew.members ?? []).map((member) => member.employeeId))
+    lastCrewRef.current = selectedCrewId
+  }, [crewsQuery.data, selectedCrewId])
 
   const deviationTypeOptions: SelectionOption[] = useMemo(
     () =>
@@ -201,6 +232,22 @@ export default function DeviationsPage() {
   const selectedDeviationType = useMemo(
     () => (deviationTypesQuery.data ?? []).find((item) => item.id === deviationTypeId) ?? null,
     [deviationTypeId, deviationTypesQuery.data],
+  )
+
+  const selectedCrew = useMemo(
+    () => (crewsQuery.data ?? []).find((crew) => crew.id === selectedCrewId) ?? null,
+    [crewsQuery.data, selectedCrewId],
+  )
+
+  const workFunctionOptions: SelectionOption[] = useMemo(
+    () =>
+      (workFunctionsQuery.data ?? []).map((workFunction) => ({
+        value: workFunction.id,
+        label: workFunction.name,
+        sublabel: workFunction.code,
+        caption: workFunction.description ?? undefined,
+      })),
+    [workFunctionsQuery.data],
   )
 
   const employeeOptions: SelectionOption[] = useMemo(
@@ -219,22 +266,10 @@ export default function DeviationsPage() {
     const employeeMap = new Map(
       (employeesQuery.data ?? []).map((employee) => [employee.id, employee]),
     )
-    const contextMemberMap = new Map(
-      teamMembers.map((member) => [
-        member.employeeId,
-        {
-          id: member.employeeId,
-          name: member.name,
-          registrationCode: member.registrationCode,
-          role: member.role,
-        },
-      ]),
-    )
-
     return selectedMemberIds
-      .map((employeeId) => employeeMap.get(employeeId) ?? contextMemberMap.get(employeeId))
+      .map((employeeId) => employeeMap.get(employeeId))
       .filter((employee): employee is NonNullable<typeof employee> => Boolean(employee))
-  }, [employeesQuery.data, selectedMemberIds, teamMembers])
+  }, [employeesQuery.data, selectedMemberIds])
 
   const estimatedManHours = useMemo(() => {
     const start = parseDateTimeInput(occurredDate, occurredTime)
@@ -243,8 +278,23 @@ export default function DeviationsPage() {
       return 0
     }
 
-    return ((end.getTime() - start.getTime()) / 3_600_000) * selectedMemberIds.length
-  }, [occurredDate, occurredTime, resolvedDate, resolvedTime, selectedMemberIds.length])
+    const effectiveCount =
+      laborMode === 'CREW'
+        ? selectedMemberIds.length
+        : laborMode === 'FUNCTION_QUANTITY'
+          ? functionQuantities.reduce((total, item) => total + item.quantity, 0)
+          : 0
+
+    return ((end.getTime() - start.getTime()) / 3_600_000) * effectiveCount
+  }, [
+    functionQuantities,
+    laborMode,
+    occurredDate,
+    occurredTime,
+    resolvedDate,
+    resolvedTime,
+    selectedMemberIds.length,
+  ])
 
   const resolvePickerDate = (field: DateTimeFieldKey) => {
     if (field === 'occurredDate') {
@@ -317,14 +367,17 @@ export default function DeviationsPage() {
     setOccurredTime(formatTime(new Date()))
     setResolvedDate(formatDate(new Date()))
     setResolvedTime(formatTime(new Date()))
-    setSelectedMemberIds(teamMembers.map((member) => member.employeeId))
+    setLaborMode('UNASSIGNED')
+    setSelectedCrewId('')
+    setSelectedMemberIds([])
+    setFunctionQuantities([])
     setNotes('')
     setEvidences([])
     setEvidenceCaption('')
   }
 
   const buildDto = (): CreateOperationalDeviationDto | null => {
-    if (!companyId || !contractId || !unitId || !crewId) {
+    if (!companyId || !contractId || !unitId) {
       return null
     }
 
@@ -350,14 +403,15 @@ export default function DeviationsPage() {
 
     const dto: CreateOperationalDeviationDto = {
       deviationTypeId,
-      crewId,
-      laborMode: 'CREW',
+      crewId: laborMode === 'CREW' ? selectedCrewId : undefined,
+      laborMode,
       title: title.trim(),
       description: description.trim() || undefined,
       responsibility,
       ocurredAt: occurredAtDate.toISOString(),
       resolvedAt: resolvedAtDate.toISOString(),
-      memberEmployeeIds: selectedMemberIds,
+      memberEmployeeIds: laborMode === 'CREW' ? selectedMemberIds : undefined,
+      functionQuantities: laborMode === 'FUNCTION_QUANTITY' ? functionQuantities : undefined,
       isGlobal: true,
       companyId,
       unitId,
@@ -372,7 +426,7 @@ export default function DeviationsPage() {
     if (isSubmitting) return
 
     if (!scopeReady) {
-      setSubmitError('Defina unidade, contrato e equipe antes de registrar um desvio.')
+      setSubmitError('Defina unidade e contrato antes de registrar um desvio.')
       return
     }
 
@@ -386,8 +440,22 @@ export default function DeviationsPage() {
       return
     }
 
-    if (selectedMemberIds.length === 0) {
-      setSubmitError('Selecione ao menos um funcionário para o desvio.')
+    if (laborMode === 'CREW' && !selectedCrewId) {
+      setSubmitError('Selecione a equipe afetada pelo desvio.')
+      return
+    }
+
+    if (laborMode === 'CREW' && selectedMemberIds.length === 0) {
+      setSubmitError('Selecione ao menos um integrante da equipe para o desvio.')
+      return
+    }
+
+    if (
+      laborMode === 'FUNCTION_QUANTITY' &&
+      (functionQuantities.length === 0 ||
+        functionQuantities.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1))
+    ) {
+      setSubmitError('Informe ao menos uma função com efetivo inteiro maior que zero.')
       return
     }
 
@@ -538,16 +606,12 @@ export default function DeviationsPage() {
               <View style={styles.contextMissingCard}>
                 <Text style={styles.contextMissingTitle}>Prepare a jornada antes</Text>
                 <Text style={styles.contextMissingDescription}>
-                  O desvio precisa de unidade, contrato e equipe definidos.
+                  O desvio precisa de unidade e contrato definidos.
                 </Text>
                 <Pressable
                   onPress={() => {
                     blurActiveElement()
-                    router.push(
-                      (contractId && unitId
-                        ? '/(app)/context/setup'
-                        : '/(app)/context/unit') as never,
-                    )
+                    router.push('/(app)/context/unit' as never)
                   }}
                   style={({ pressed }) => [
                     styles.primaryButton,
@@ -768,79 +832,165 @@ export default function DeviationsPage() {
                 </Section>
 
                 <Section
-                  title="Equipe afetada"
-                  subtitle="Ajuste a composição deste desvio sem alterar a equipe cadastrada."
+                  title="Efetivo afetado"
+                  subtitle="Escolha a composição deste desvio no momento do lançamento."
                 >
-                  <View style={styles.crewCard}>
-                    <View style={styles.crewCardText}>
-                      <Text style={styles.crewCardTitle}>
-                        {crewName ?? 'Equipe da jornada ativa'}
-                      </Text>
-                      <Text style={styles.crewCardMeta}>
-                        {selectedMemberIds.length} integrante(s) no snapshot
-                      </Text>
-                      <Text style={styles.crewCardMeta}>
-                        HH calculado: {estimatedManHours.toFixed(2)}
-                      </Text>
-                    </View>
+                  <SegmentedControl
+                    value={laborMode}
+                    onChange={setLaborMode}
+                    options={[
+                      { value: 'CREW', label: 'Equipe' },
+                      { value: 'FUNCTION_QUANTITY', label: 'Efetivo' },
+                      { value: 'UNASSIGNED', label: 'Sem efetivo' },
+                    ]}
+                  />
 
-                    <View style={styles.crewActions}>
-                      <Pressable
-                        onPress={() => setRosterExpanded((current) => !current)}
-                        style={({ pressed }) => [
-                          styles.ghostButton,
-                          pressed ? styles.ghostButtonPressed : null,
-                        ]}
-                      >
-                        <Ionicons
-                          name={rosterExpanded ? 'chevron-up-outline' : 'people-outline'}
-                          size={15}
-                          color={colors.primaryStrong}
-                        />
-                        <Text style={styles.ghostButtonLabel}>
-                          {rosterExpanded ? 'Ocultar' : 'Ver integrantes'}
-                        </Text>
-                      </Pressable>
+                  {laborMode === 'CREW' ? (
+                    <>
+                      <SelectTrigger
+                        label="Equipe"
+                        value={selectedCrew?.name ?? null}
+                        placeholder="Selecionar equipe"
+                        helper={
+                          selectedCrew
+                            ? `${selectedCrew.members?.length ?? 0} integrante(s) • ${
+                                selectedCrew.foreman?.name ?? 'Sem encarregado'
+                              }`
+                            : 'Escolha a equipe afetada por este desvio.'
+                        }
+                        onPress={() => setActivePicker('crew')}
+                      />
 
-                      <Pressable
-                        onPress={() => setActivePicker('members')}
-                        disabled={employeeOptions.length === 0}
-                        style={({ pressed }) => [
-                          styles.circleAction,
-                          employeeOptions.length === 0 ? styles.circleActionDisabled : null,
-                          pressed && employeeOptions.length > 0 ? styles.circleActionPressed : null,
-                        ]}
-                      >
-                        <Ionicons name="create-outline" size={16} color={colors.white} />
-                      </Pressable>
-                    </View>
-                  </View>
+                      {selectedCrew ? (
+                        <View style={styles.crewCard}>
+                          <View style={styles.crewCardText}>
+                            <Text style={styles.crewCardTitle}>{selectedCrew.name}</Text>
+                            <Text style={styles.crewCardMeta}>
+                              {selectedMemberIds.length} integrante(s) no snapshot
+                            </Text>
+                            <Text style={styles.crewCardMeta}>
+                              HH calculado: {estimatedManHours.toFixed(2)}
+                            </Text>
+                          </View>
 
-                  {rosterExpanded ? (
-                    <View style={styles.memberList}>
-                      {selectedEmployees.length === 0 ? (
-                        <View style={styles.inlineEmptyState}>
-                          <Text style={styles.inlineEmptyTitle}>Sem integrantes selecionados</Text>
-                          <Text style={styles.inlineEmptyDescription}>
-                            Use o botão de edição para informar quem foi afetado pelo desvio.
-                          </Text>
-                        </View>
-                      ) : (
-                        selectedEmployees.map((employee) => (
-                          <View key={employee.id} style={styles.memberRow}>
-                            <View style={styles.memberInfo}>
-                              <Text style={styles.memberName}>{employee.name}</Text>
-                              <Text style={styles.memberMeta}>
-                                {[employee.registrationCode, employee.role]
-                                  .filter(Boolean)
-                                  .join(' • ') || 'Sem detalhes adicionais'}
+                          <View style={styles.crewActions}>
+                            <Pressable
+                              onPress={() => setRosterExpanded((current) => !current)}
+                              style={({ pressed }) => [
+                                styles.ghostButton,
+                                pressed ? styles.ghostButtonPressed : null,
+                              ]}
+                            >
+                              <Ionicons
+                                name={rosterExpanded ? 'chevron-up-outline' : 'people-outline'}
+                                size={15}
+                                color={colors.primaryStrong}
+                              />
+                              <Text style={styles.ghostButtonLabel}>
+                                {rosterExpanded ? 'Ocultar' : 'Ver integrantes'}
                               </Text>
-                            </View>
+                            </Pressable>
 
                             <Pressable
+                              onPress={() => setActivePicker('members')}
+                              disabled={employeeOptions.length === 0}
+                              style={({ pressed }) => [
+                                styles.circleAction,
+                                employeeOptions.length === 0 ? styles.circleActionDisabled : null,
+                                pressed && employeeOptions.length > 0
+                                  ? styles.circleActionPressed
+                                  : null,
+                              ]}
+                            >
+                              <Ionicons name="create-outline" size={16} color={colors.white} />
+                            </Pressable>
+                          </View>
+                        </View>
+                      ) : null}
+
+                      {rosterExpanded ? (
+                        <View style={styles.memberList}>
+                          {selectedEmployees.length === 0 ? (
+                            <View style={styles.inlineEmptyState}>
+                              <Text style={styles.inlineEmptyTitle}>
+                                Sem integrantes selecionados
+                              </Text>
+                              <Text style={styles.inlineEmptyDescription}>
+                                Use o botão de edição para informar quem foi afetado.
+                              </Text>
+                            </View>
+                          ) : (
+                            selectedEmployees.map((employee) => (
+                              <View key={employee.id} style={styles.memberRow}>
+                                <View style={styles.memberInfo}>
+                                  <Text style={styles.memberName}>{employee.name}</Text>
+                                  <Text style={styles.memberMeta}>
+                                    {[employee.registrationCode, employee.role]
+                                      .filter(Boolean)
+                                      .join(' • ') || 'Sem detalhes adicionais'}
+                                  </Text>
+                                </View>
+
+                                <Pressable
+                                  onPress={() =>
+                                    setSelectedMemberIds((current) =>
+                                      current.filter((employeeId) => employeeId !== employee.id),
+                                    )
+                                  }
+                                  style={({ pressed }) => [
+                                    styles.memberRemoveButton,
+                                    pressed ? styles.memberRemoveButtonPressed : null,
+                                  ]}
+                                >
+                                  <Ionicons name="close" size={14} color={colors.danger} />
+                                </Pressable>
+                              </View>
+                            ))
+                          )}
+                        </View>
+                      ) : null}
+                    </>
+                  ) : null}
+
+                  {laborMode === 'FUNCTION_QUANTITY' ? (
+                    <View style={styles.memberList}>
+                      {functionQuantities.map((item) => {
+                        const workFunction = (workFunctionsQuery.data ?? []).find(
+                          (candidate) => candidate.id === item.workFunctionId,
+                        )
+                        return (
+                          <View key={item.workFunctionId} style={styles.memberRow}>
+                            <View style={styles.memberInfo}>
+                              <Text style={styles.memberName}>
+                                {workFunction?.name ?? 'Função operacional'}
+                              </Text>
+                              <Text style={styles.memberMeta}>
+                                {workFunction?.code ?? 'Função cadastrada'}
+                              </Text>
+                            </View>
+                            <TextInput
+                              value={String(item.quantity)}
+                              onChangeText={(value) => {
+                                const quantity = Number(value.replace(/\D/g, '')) || 0
+                                setFunctionQuantities((current) =>
+                                  current.map((currentItem) =>
+                                    currentItem.workFunctionId === item.workFunctionId
+                                      ? { ...currentItem, quantity }
+                                      : currentItem,
+                                  ),
+                                )
+                              }}
+                              keyboardType="number-pad"
+                              selectTextOnFocus
+                              style={styles.functionQuantityInput}
+                            />
+                            <Pressable
                               onPress={() =>
-                                setSelectedMemberIds((current) =>
-                                  current.filter((employeeId) => employeeId !== employee.id),
+                                setFunctionQuantities((current) =>
+                                  current.filter(
+                                    (currentItem) =>
+                                      currentItem.workFunctionId !== item.workFunctionId,
+                                  ),
                                 )
                               }
                               style={({ pressed }) => [
@@ -851,8 +1001,33 @@ export default function DeviationsPage() {
                               <Ionicons name="close" size={14} color={colors.danger} />
                             </Pressable>
                           </View>
-                        ))
-                      )}
+                        )
+                      })}
+
+                      <Pressable
+                        onPress={() => setActivePicker('functions')}
+                        style={({ pressed }) => [
+                          styles.ghostButton,
+                          pressed ? styles.ghostButtonPressed : null,
+                        ]}
+                      >
+                        <Ionicons name="add" size={15} color={colors.primaryStrong} />
+                        <Text style={styles.ghostButtonLabel}>Adicionar funções</Text>
+                      </Pressable>
+                      <Text style={styles.crewCardMeta}>
+                        Efetivo total:{' '}
+                        {functionQuantities.reduce((total, item) => total + item.quantity, 0)} • HH
+                        calculado: {estimatedManHours.toFixed(2)}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {laborMode === 'UNASSIGNED' ? (
+                    <View style={styles.inlineEmptyState}>
+                      <Text style={styles.inlineEmptyTitle}>Desvio sem efetivo</Text>
+                      <Text style={styles.inlineEmptyDescription}>
+                        O desvio será registrado sem equipe, pessoas ou quantitativo por função.
+                      </Text>
                     </View>
                   ) : null}
                 </Section>
@@ -938,6 +1113,23 @@ export default function DeviationsPage() {
         onClose={() => setActivePicker(null)}
       />
       <SelectionModal
+        visible={activePicker === 'crew'}
+        title="Equipe do desvio"
+        subtitle="A equipe selecionada fornece a composição inicial do snapshot."
+        options={(crewsQuery.data ?? []).map((crew) => ({
+          value: crew.id,
+          label: crew.name,
+          sublabel: `${crew.members?.length ?? 0} integrante(s)`,
+          caption: crew.foreman?.name ? `Encarregado: ${crew.foreman.name}` : 'Sem encarregado',
+        }))}
+        selectedValue={selectedCrewId}
+        onSelect={(value) => {
+          setSelectedCrewId(value)
+          lastCrewRef.current = null
+        }}
+        onClose={() => setActivePicker(null)}
+      />
+      <SelectionModal
         visible={activePicker === 'members'}
         title="Equipe do desvio"
         subtitle="Selecione a composição efetivamente afetada."
@@ -951,6 +1143,32 @@ export default function DeviationsPage() {
           employeesQuery.isLoading
             ? 'Carregando funcionários...'
             : 'Nenhum funcionário disponível neste contrato.'
+        }
+      />
+      <SelectionModal
+        visible={activePicker === 'functions'}
+        title="Funções do efetivo"
+        subtitle="Informe depois a quantidade de pessoas em cada função."
+        options={workFunctionOptions}
+        selectedValues={functionQuantities.map((item) => item.workFunctionId)}
+        multiple
+        confirmLabel="Usar funções"
+        onConfirm={(values) =>
+          setFunctionQuantities((current) =>
+            values.map(
+              (workFunctionId) =>
+                current.find((item) => item.workFunctionId === workFunctionId) ?? {
+                  workFunctionId,
+                  quantity: 1,
+                },
+            ),
+          )
+        }
+        onClose={() => setActivePicker(null)}
+        emptyMessage={
+          workFunctionsQuery.isLoading
+            ? 'Carregando funções...'
+            : 'Nenhuma função operacional disponível.'
         }
       />
     </SafeAreaView>
@@ -1267,6 +1485,18 @@ const styles = StyleSheet.create({
   },
   memberRemoveButtonPressed: {
     opacity: 0.86,
+  },
+  functionQuantityInput: {
+    width: 58,
+    minHeight: 38,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   inlineEmptyState: {
     borderRadius: radius.md,

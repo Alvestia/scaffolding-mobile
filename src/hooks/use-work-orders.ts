@@ -14,6 +14,7 @@ export function useWorkOrders(filters: Filters) {
   return useQuery({
     queryKey: ['work-orders', filters.contractId, filters.unitId, filters.projectId, isConnected],
     enabled: Boolean(filters.unitId && filters.contractId),
+    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       if (!filters.unitId || !filters.contractId) {
         return []

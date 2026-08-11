@@ -3,4 +3,5 @@ export type Project = {
   code?: string | null
   name: string
   status?: string | null
+  contractId?: string | null
 }

@@ -1,5 +1,5 @@
-import { createPortal } from 'react-dom'
 import { Ionicons } from '@expo/vector-icons'
+import { createPortal } from 'react-dom'
 import { type ComponentProps, useEffect, useMemo, useState } from 'react'
 import {
   KeyboardAvoidingView,
@@ -8,35 +8,15 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native'
-import { SegmentedControl } from '@/components/ui/segmented-control'
 import { SelectionModal, type SelectionOption } from '@/components/ui/selection-modal'
 import { colors, radius, spacing } from '@/constants/theme'
+import { useScaffoldComponentTypes } from '@/hooks/use-scaffold-component-types'
 import type { EmergencyScaffoldComponentDraft } from '@/types/execution'
-import { MeasurementUnit } from '@/types/scaffold-service'
-import {
-  calculateMeasuredTotal,
-  getMeasurementUnitLabel,
-  getVisibleMeasurementDimensions,
-  normalizeMeasuredDimensions,
-} from '@/utils/execution'
 import { blurActiveElement } from '@/utils/focus'
-
-const categoryOptions: SelectionOption[] = [
-  { value: 'PATAMAR', label: 'Patamar' },
-  { value: 'TABUADO', label: 'Tabuado' },
-  { value: 'LINHA_DE_VIDA', label: 'Linha de vida' },
-  { value: 'GUARDA_CORPO', label: 'Guarda-corpo' },
-  { value: 'RODAPE', label: 'Rodapé' },
-  { value: 'ESCADA', label: 'Escada' },
-  { value: 'TRAVAMENTO', label: 'Travamento' },
-  { value: 'ACESSORIO', label: 'Acessório' },
-  { value: 'OUTRO', label: 'Outro' },
-]
 
 type ComponentDraftModalProps = {
   visible: boolean
@@ -45,21 +25,10 @@ type ComponentDraftModalProps = {
   onSave: (value: EmergencyScaffoldComponentDraft) => void
 }
 
-type DraftMeasurementUnit =
-  | typeof MeasurementUnit.M3
-  | typeof MeasurementUnit.M2
-  | typeof MeasurementUnit.LINEAR_M
+type ComponentMeasurementUnit = EmergencyScaffoldComponentDraft['measurementUnit']
 
 type CompactInputProps = ComponentProps<typeof TextInput> & {
   label: string
-}
-
-type SelectTriggerProps = {
-  label: string
-  value?: string | null
-  helper?: string | null
-  placeholder: string
-  onPress: () => void
 }
 
 function CompactInput({ label, multiline, style, ...props }: CompactInputProps) {
@@ -76,35 +45,32 @@ function CompactInput({ label, multiline, style, ...props }: CompactInputProps) 
   )
 }
 
-function SelectTrigger({ label, value, helper, placeholder, onPress }: SelectTriggerProps) {
-  return (
-    <Pressable
-      onPress={() => {
-        blurActiveElement()
-        onPress()
-      }}
-      style={({ pressed }) => [styles.selectTrigger, pressed ? styles.selectTriggerPressed : null]}
-    >
-      <View style={styles.selectTriggerText}>
-        <Text style={styles.fieldLabel}>{label}</Text>
-        <Text style={[styles.selectTriggerValue, !value ? styles.selectTriggerPlaceholder : null]}>
-          {value ?? placeholder}
-        </Text>
-        <Text style={styles.selectTriggerHelper}>{helper ?? 'Toque para selecionar'}</Text>
-      </View>
-      <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-    </Pressable>
-  )
+function normalizeUnit(value?: string | null): ComponentMeasurementUnit {
+  if (value === 'M3' || value === 'M2') return value
+  return 'UNIDADE'
 }
 
-function coerceMeasurementUnit(
-  value?: EmergencyScaffoldComponentDraft['measurementUnit'] | null,
-): DraftMeasurementUnit {
-  if (value === MeasurementUnit.M2 || value === MeasurementUnit.LINEAR_M) {
-    return value
-  }
+function parseDecimal(value: string) {
+  const parsed = Number(value.replace(',', '.'))
+  return Number.isFinite(parsed) ? parsed : 0
+}
 
-  return MeasurementUnit.M3
+function getUnitLabel(unit: ComponentMeasurementUnit) {
+  if (unit === 'M3') return 'Volume (m³)'
+  if (unit === 'M2') return 'Área (m²)'
+  return 'Linear (m)'
+}
+
+function getCalculatedLabel(unit: ComponentMeasurementUnit) {
+  if (unit === 'M3') return 'Volume calculado'
+  if (unit === 'M2') return 'Área calculada'
+  return 'Linear calculado'
+}
+
+function getUnitSuffix(unit: ComponentMeasurementUnit) {
+  if (unit === 'M3') return 'm³'
+  if (unit === 'M2') return 'm²'
+  return 'm'
 }
 
 export function ComponentDraftModal({
@@ -113,112 +79,94 @@ export function ComponentDraftModal({
   onClose,
   onSave,
 }: ComponentDraftModalProps) {
-  const [category, setCategory] = useState(initialValue?.category ?? 'OUTRO')
-  const [name, setName] = useState(initialValue?.name ?? '')
-  const [description, setDescription] = useState(initialValue?.description ?? '')
-  const [measurementUnit, setMeasurementUnit] = useState<DraftMeasurementUnit>(
-    coerceMeasurementUnit(initialValue?.measurementUnit),
+  const componentTypesQuery = useScaffoldComponentTypes()
+  const [componentTypeId, setComponentTypeId] = useState(initialValue?.componentTypeId ?? '')
+  const [measurementUnit, setMeasurementUnit] = useState<ComponentMeasurementUnit>(
+    normalizeUnit(initialValue?.measurementUnit),
   )
-  const [repeatCount, setRepeatCount] = useState(String(initialValue?.repeatCount ?? '1'))
+  const [description, setDescription] = useState(initialValue?.description ?? '')
   const [height, setHeight] = useState(String(initialValue?.height ?? ''))
   const [width, setWidth] = useState(String(initialValue?.width ?? ''))
   const [length, setLength] = useState(String(initialValue?.length ?? ''))
-  const [plannedQuantity, setPlannedQuantity] = useState(
-    String(initialValue?.plannedQuantity ?? ''),
-  )
-  const [trackAssembly, setTrackAssembly] = useState(initialValue?.trackAssembly ?? true)
-  const [trackDisassembly, setTrackDisassembly] = useState(initialValue?.trackDisassembly ?? true)
-  const [showCategoryPicker, setShowCategoryPicker] = useState(false)
+  const [showTypePicker, setShowTypePicker] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!visible) {
-      return
-    }
+    if (!visible) return
 
-    setCategory(initialValue?.category ?? 'OUTRO')
-    setName(initialValue?.name ?? '')
+    setComponentTypeId(initialValue?.componentTypeId ?? '')
+    setMeasurementUnit(normalizeUnit(initialValue?.measurementUnit))
     setDescription(initialValue?.description ?? '')
-    setMeasurementUnit(coerceMeasurementUnit(initialValue?.measurementUnit))
-    setRepeatCount(String(initialValue?.repeatCount ?? '1'))
     setHeight(String(initialValue?.height ?? ''))
     setWidth(String(initialValue?.width ?? ''))
     setLength(String(initialValue?.length ?? ''))
-    setPlannedQuantity(String(initialValue?.plannedQuantity ?? ''))
-    setTrackAssembly(initialValue?.trackAssembly ?? true)
-    setTrackDisassembly(initialValue?.trackDisassembly ?? true)
     setError(null)
   }, [initialValue, visible])
 
-  const visibleMeasurementDimensions = useMemo(
-    () => getVisibleMeasurementDimensions(measurementUnit),
-    [measurementUnit],
+  const selectedComponentType = useMemo(
+    () => (componentTypesQuery.data ?? []).find((item) => item.id === componentTypeId) ?? null,
+    [componentTypeId, componentTypesQuery.data],
   )
 
-  useEffect(() => {
-    if (!visibleMeasurementDimensions.height && height) {
-      setHeight('')
-    }
-
-    if (!visibleMeasurementDimensions.width && width) {
-      setWidth('')
-    }
-
-    if (!visibleMeasurementDimensions.length && length) {
-      setLength('')
-    }
-  }, [
-    height,
-    length,
-    visibleMeasurementDimensions.height,
-    visibleMeasurementDimensions.length,
-    visibleMeasurementDimensions.width,
-    width,
-  ])
+  const componentTypeOptions: SelectionOption[] = useMemo(
+    () =>
+      (componentTypesQuery.data ?? []).map((item) => ({
+        value: item.id,
+        label: `${item.code} - ${item.name}`,
+        sublabel: getUnitLabel(normalizeUnit(item.defaultMeasurementUnit)),
+        caption: item.description ?? undefined,
+        keywords: [item.code, item.name, ...(item.aliases ?? [])].join(' '),
+      })),
+    [componentTypesQuery.data],
+  )
 
   const calculatedQuantity = useMemo(() => {
-    const normalizedDimensions = normalizeMeasuredDimensions(measurementUnit, {
-      height: Number(height || 0),
-      width: Number(width || 0),
-      length: Number(length || 0),
-    })
+    const parsedHeight = parseDecimal(height)
+    const parsedWidth = parseDecimal(width)
+    const parsedLength = parseDecimal(length)
 
-    return calculateMeasuredTotal(measurementUnit, normalizedDimensions)
+    if (measurementUnit === 'M3') {
+      return Number((parsedHeight * parsedWidth * parsedLength).toFixed(3))
+    }
+    if (measurementUnit === 'M2') {
+      return Number((parsedHeight * parsedLength).toFixed(3))
+    }
+    return Number(parsedLength.toFixed(3))
   }, [height, length, measurementUnit, width])
 
+  const selectComponentType = (value: string) => {
+    const componentType = (componentTypesQuery.data ?? []).find((item) => item.id === value)
+    const nextUnit = normalizeUnit(componentType?.defaultMeasurementUnit)
+
+    setComponentTypeId(value)
+    setMeasurementUnit(nextUnit)
+    if (nextUnit !== 'M3') setWidth('')
+    if (nextUnit === 'UNIDADE') setHeight('')
+    setError(null)
+  }
+
   const handleSave = () => {
-    if (name.trim().length < 2) {
-      setError('Informe um nome claro para o componente.')
+    if (!componentTypeId || !selectedComponentType) {
+      setError('Selecione o tipo do componente.')
       return
     }
 
-    const resolvedQuantity =
-      plannedQuantity.trim().length > 0 ? Number(plannedQuantity) : calculatedQuantity
-
-    if (!resolvedQuantity || resolvedQuantity <= 0) {
-      setError('Informe uma quantidade planejada válida para o componente.')
+    if (calculatedQuantity <= 0) {
+      setError('Informe as medidas necessárias para calcular a metragem do componente.')
       return
     }
-
-    const normalizedDimensions = normalizeMeasuredDimensions(measurementUnit, {
-      height: height ? Number(height) : undefined,
-      width: width ? Number(width) : undefined,
-      length: length ? Number(length) : undefined,
-    })
 
     setError(null)
     onSave({
-      category,
-      name: name.trim(),
+      componentTypeId,
+      componentTypeCode: selectedComponentType.code,
+      name: selectedComponentType.name,
       description: description.trim() || undefined,
       measurementUnit,
-      repeatCount: Number(repeatCount || 1),
-      height: normalizedDimensions.height,
-      width: normalizedDimensions.width,
-      length: normalizedDimensions.length,
-      plannedQuantity: resolvedQuantity,
-      trackAssembly,
-      trackDisassembly,
+      height: measurementUnit !== 'UNIDADE' ? parseDecimal(height) : undefined,
+      width: measurementUnit === 'M3' ? parseDecimal(width) : undefined,
+      length: parseDecimal(length),
+      plannedQuantity: calculatedQuantity,
     })
   }
 
@@ -242,155 +190,113 @@ export function ComponentDraftModal({
           automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         >
           <View style={styles.handle} />
-
           <View style={styles.header}>
             <View style={styles.headerText}>
               <Text style={styles.title}>
                 {initialValue ? 'Editar componente' : 'Novo componente'}
               </Text>
               <Text style={styles.subtitle}>
-                Defina o lote com medição correta e uma leitura simples para campo.
+                Cada inclusão representa um componente. Tipo e unidade seguem o catálogo.
               </Text>
             </View>
-
-            <Pressable
-              onPress={handleClose}
-              style={({ pressed }) => [
-                styles.closeButton,
-                pressed ? styles.closeButtonPressed : null,
-              ]}
-            >
+            <Pressable onPress={handleClose} style={styles.closeButton}>
               <Ionicons name="close" size={16} color={colors.primaryStrong} />
             </Pressable>
           </View>
 
-          <SelectTrigger
-            label="Categoria"
-            value={categoryOptions.find((item) => item.value === category)?.label ?? null}
-            placeholder="Selecione a categoria"
-            helper="Escolha o tipo principal do lote"
-            onPress={() => setShowCategoryPicker(true)}
-          />
+          <Pressable
+            onPress={() => {
+              blurActiveElement()
+              setShowTypePicker(true)
+            }}
+            style={({ pressed }) => [
+              styles.selectTrigger,
+              pressed ? styles.selectTriggerPressed : null,
+            ]}
+          >
+            <View style={styles.selectTriggerText}>
+              <Text style={styles.fieldLabel}>Tipo do componente</Text>
+              <Text
+                style={[
+                  styles.selectTriggerValue,
+                  !selectedComponentType ? styles.selectTriggerPlaceholder : null,
+                ]}
+              >
+                {selectedComponentType
+                  ? `${selectedComponentType.code} - ${selectedComponentType.name}`
+                  : componentTypesQuery.isLoading
+                    ? 'Carregando catálogo...'
+                    : 'Selecionar tipo'}
+              </Text>
+              <Text style={styles.selectTriggerHelper}>
+                Disponível offline após a preparação do contrato.
+              </Text>
+            </View>
+            <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+          </Pressable>
+
+          <View style={styles.readOnlyField}>
+            <Text style={styles.fieldLabel}>Unidade</Text>
+            <Text style={styles.readOnlyValue}>
+              {selectedComponentType ? getUnitLabel(measurementUnit) : 'Selecione o tipo'}
+            </Text>
+            <Text style={styles.readOnlyHelper}>Definida no cadastro do tipo de componente.</Text>
+          </View>
+
+          {selectedComponentType ? (
+            <View style={styles.dimensionsGrid}>
+              {measurementUnit !== 'UNIDADE' ? (
+                <CompactInput
+                  label="Altura"
+                  placeholder="0,00"
+                  keyboardType="decimal-pad"
+                  value={height}
+                  onChangeText={setHeight}
+                />
+              ) : null}
+              {measurementUnit === 'M3' ? (
+                <CompactInput
+                  label="Largura"
+                  placeholder="0,00"
+                  keyboardType="decimal-pad"
+                  value={width}
+                  onChangeText={setWidth}
+                />
+              ) : null}
+              <CompactInput
+                label="Comprimento"
+                placeholder="0,00"
+                keyboardType="decimal-pad"
+                value={length}
+                onChangeText={setLength}
+              />
+            </View>
+          ) : null}
+
+          <View style={styles.calculatedBox}>
+            <Text style={styles.calculatedLabel}>{getCalculatedLabel(measurementUnit)}</Text>
+            <Text style={styles.calculatedValue}>
+              {selectedComponentType ? calculatedQuantity : '-'}{' '}
+              {selectedComponentType ? getUnitSuffix(measurementUnit) : ''}
+            </Text>
+          </View>
 
           <CompactInput
-            label="Nome do componente"
-            placeholder="Ex.: Plataforma superior"
-            value={name}
-            onChangeText={setName}
-          />
-
-          <CompactInput
-            label="Descrição"
-            placeholder="Detalhes opcionais do lote"
+            label="Observações"
+            placeholder="Opcional"
             value={description}
             onChangeText={setDescription}
             multiline
             numberOfLines={3}
           />
 
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Metragem</Text>
-            <SegmentedControl
-              value={measurementUnit}
-              onChange={(value) => setMeasurementUnit(value as DraftMeasurementUnit)}
-              options={[
-                { value: MeasurementUnit.M3, label: 'Volume' },
-                { value: MeasurementUnit.M2, label: 'Área' },
-                { value: MeasurementUnit.LINEAR_M, label: 'Linear' },
-              ]}
-            />
-          </View>
-
-          <CompactInput
-            label="Repetições"
-            placeholder="1"
-            keyboardType="number-pad"
-            value={repeatCount}
-            onChangeText={setRepeatCount}
-          />
-
-          <View style={styles.dimensionsGrid}>
-            {visibleMeasurementDimensions.height ? (
-              <CompactInput
-                label="Altura"
-                keyboardType="decimal-pad"
-                value={height}
-                onChangeText={setHeight}
-              />
-            ) : null}
-            {visibleMeasurementDimensions.width ? (
-              <CompactInput
-                label="Largura"
-                keyboardType="decimal-pad"
-                value={width}
-                onChangeText={setWidth}
-              />
-            ) : null}
-            {visibleMeasurementDimensions.length ? (
-              <CompactInput
-                label="Comprimento"
-                keyboardType="decimal-pad"
-                value={length}
-                onChangeText={setLength}
-              />
-            ) : null}
-          </View>
-
-          <CompactInput
-            label={`Quantidade planejada (${getMeasurementUnitLabel(measurementUnit)})`}
-            placeholder={String(calculatedQuantity || '')}
-            keyboardType="decimal-pad"
-            value={plannedQuantity}
-            onChangeText={setPlannedQuantity}
-          />
-
-          <View style={styles.calculatedBox}>
-            <Text style={styles.calculatedLabel}>Quantidade calculada</Text>
-            <Text style={styles.calculatedValue}>
-              {calculatedQuantity || 0} {getMeasurementUnitLabel(measurementUnit)}
-            </Text>
-          </View>
-
-          <View style={styles.switchRow}>
-            <View style={styles.switchText}>
-              <Text style={styles.switchTitle}>Rastrear montagem</Text>
-              <Text style={styles.switchDescription}>
-                Permite usar esse lote no avanço de montagem.
-              </Text>
-            </View>
-            <Switch value={trackAssembly} onValueChange={setTrackAssembly} />
-          </View>
-
-          <View style={styles.switchRow}>
-            <View style={styles.switchText}>
-              <Text style={styles.switchTitle}>Rastrear desmontagem</Text>
-              <Text style={styles.switchDescription}>
-                Permite usar esse lote no avanço de desmontagem.
-              </Text>
-            </View>
-            <Switch value={trackDisassembly} onValueChange={setTrackDisassembly} />
-          </View>
-
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <View style={styles.actions}>
-            <Pressable
-              onPress={handleClose}
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                pressed ? styles.secondaryButtonPressed : null,
-              ]}
-            >
+            <Pressable onPress={handleClose} style={styles.secondaryButton}>
               <Text style={styles.secondaryButtonLabel}>Cancelar</Text>
             </Pressable>
-
-            <Pressable
-              onPress={handleSave}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed ? styles.primaryButtonPressed : null,
-              ]}
-            >
+            <Pressable onPress={handleSave} style={styles.primaryButton}>
               <Text style={styles.primaryButtonLabel}>Salvar componente</Text>
             </Pressable>
           </View>
@@ -398,30 +304,31 @@ export function ComponentDraftModal({
       </View>
 
       <SelectionModal
-        visible={showCategoryPicker}
-        title="Categoria do componente"
-        options={categoryOptions}
-        selectedValue={category}
-        onSelect={(value) => setCategory(value)}
-        onClose={() => setShowCategoryPicker(false)}
+        visible={showTypePicker}
+        title="Tipo do componente"
+        subtitle="A unidade de medição será aplicada automaticamente."
+        options={componentTypeOptions}
+        selectedValue={componentTypeId}
+        onSelect={selectComponentType}
+        onClose={() => setShowTypePicker(false)}
+        emptyMessage={
+          componentTypesQuery.isLoading
+            ? 'Carregando tipos de componente...'
+            : 'Nenhum tipo de componente disponível no cache deste aparelho.'
+        }
       />
     </KeyboardAvoidingView>
   )
 
-  if (!visible) {
-    return null
-  }
+  if (!visible) return null
 
   if (Platform.OS === 'web') {
-    if (typeof document === 'undefined') {
-      return null
-    }
-
+    if (typeof document === 'undefined') return null
     return createPortal(content, document.body)
   }
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
+    <Modal visible animationType="slide" transparent onRequestClose={handleClose}>
       {content}
     </Modal>
   )
@@ -444,10 +351,7 @@ const styles = StyleSheet.create({
       default: null,
     }),
   },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(8, 20, 26, 0.42)',
-  },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(8, 20, 26, 0.42)' },
   sheet: {
     alignSelf: 'center',
     width: '100%',
@@ -459,10 +363,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },
-  content: {
-    gap: spacing.md,
-    paddingBottom: spacing.lg + 120,
-  },
+  content: { gap: spacing.md, paddingBottom: spacing.lg + 120 },
   handle: {
     alignSelf: 'center',
     width: 44,
@@ -477,20 +378,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
-  headerText: {
-    gap: spacing.xs,
-    flex: 1,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  subtitle: {
-    color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 18,
-  },
+  headerText: { gap: spacing.xs, flex: 1 },
+  title: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  subtitle: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
   closeButton: {
     width: 32,
     height: 32,
@@ -501,17 +391,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#F8FBFC',
   },
-  closeButtonPressed: {
-    opacity: 0.82,
-  },
-  fieldGroup: {
-    gap: 6,
-  },
-  fieldLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-  },
+  fieldGroup: { gap: 6 },
+  fieldLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
   fieldInput: {
     minHeight: 48,
     borderRadius: radius.lg,
@@ -522,24 +403,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
   },
-  fieldInputMultiline: {
-    minHeight: 104,
-    paddingTop: spacing.md,
-    textAlignVertical: 'top',
-  },
-  section: {
-    gap: spacing.xs,
-  },
-  sectionLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  dimensionsGrid: {
-    gap: spacing.sm,
-  },
+  fieldInputMultiline: { minHeight: 96, paddingTop: spacing.md, textAlignVertical: 'top' },
   selectTrigger: {
-    minHeight: 56,
+    minHeight: 62,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: '#D8E4E8',
@@ -551,26 +417,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
-  selectTriggerPressed: {
-    opacity: 0.85,
+  selectTriggerPressed: { opacity: 0.85 },
+  selectTriggerText: { flex: 1, gap: 3 },
+  selectTriggerValue: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  selectTriggerPlaceholder: { color: '#8AA0A8', fontWeight: '500' },
+  selectTriggerHelper: { color: colors.textMuted, fontSize: 11 },
+  readOnlyField: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#D8E4E8',
+    backgroundColor: '#F7FBFC',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: 3,
   },
-  selectTriggerText: {
-    flex: 1,
-    gap: 2,
-  },
-  selectTriggerValue: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  selectTriggerPlaceholder: {
-    color: '#8AA0A8',
-    fontWeight: '500',
-  },
-  selectTriggerHelper: {
-    color: colors.textMuted,
-    fontSize: 11,
-  },
+  readOnlyValue: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  readOnlyHelper: { color: colors.textMuted, fontSize: 10 },
+  dimensionsGrid: { gap: spacing.sm },
   calculatedBox: {
     borderRadius: radius.lg,
     borderWidth: 1,
@@ -580,49 +443,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     gap: 2,
   },
-  calculatedLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  calculatedValue: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  switchRow: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: '#D8E4E8',
-    backgroundColor: '#FBFDFD',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  switchText: {
-    flex: 1,
-    gap: 2,
-  },
-  switchTitle: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  switchDescription: {
-    color: colors.textMuted,
-    fontSize: 11,
-  },
-  error: {
-    color: colors.danger,
-    fontSize: 11,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
+  calculatedLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
+  calculatedValue: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  error: { color: colors.danger, fontSize: 11 },
+  actions: { flexDirection: 'row', gap: spacing.sm },
   secondaryButton: {
     flex: 1,
     minHeight: 48,
@@ -633,14 +457,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryButtonPressed: {
-    opacity: 0.85,
-  },
-  secondaryButtonLabel: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  secondaryButtonLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },
   primaryButton: {
     flex: 1,
     minHeight: 48,
@@ -649,12 +466,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primaryButtonPressed: {
-    opacity: 0.86,
-  },
-  primaryButtonLabel: {
-    color: '#F9FBFC',
-    fontSize: 13,
-    fontWeight: '700',
-  },
+  primaryButtonLabel: { color: '#F9FBFC', fontSize: 13, fontWeight: '700' },
 })

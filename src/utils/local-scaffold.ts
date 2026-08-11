@@ -12,7 +12,7 @@ export function localServiceToQueueItem(service: LocalScaffoldService): QueueSer
   return {
     id: service.localId,
     scaffoldId: service.localScaffoldId,
-    workOrderId: null,
+    workOrderId: service.workOrderId ?? null,
     type: service.type,
     plannedUnit: service.plannedUnit,
     plannedQuantity: service.plannedQuantity ?? 0,
@@ -26,8 +26,21 @@ export function localServiceToQueueItem(service: LocalScaffoldService): QueueSer
       id: service.localScaffoldId,
       code: service.scaffoldCode ?? 'Andaime offline',
       description: service.scaffoldDescription ?? null,
+      areaId: service.areaId ?? null,
+      areaRef: service.areaId
+        ? {
+            id: service.areaId,
+            code: service.areaCode ?? null,
+            name: service.areaName ?? 'Área selecionada',
+          }
+        : null,
     },
-    workOrder: null,
+    workOrder: service.workOrderId
+      ? {
+          id: service.workOrderId,
+          code: service.workOrderCode ?? 'OS selecionada',
+        }
+      : null,
     scaffoldComponent: null,
   }
 }

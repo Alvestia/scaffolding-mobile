@@ -16,6 +16,11 @@ export type ExecutionInputType = (typeof ExecutionInputType)[keyof typeof Execut
 
 export type ExecutionLaborMode = 'UNASSIGNED' | 'CREW' | 'FUNCTION_QUANTITY'
 
+export type ExecutionFunctionQuantityInput = {
+  workFunctionId: string
+  quantity: number
+}
+
 export type ExecutionComponentAdvanceInput = {
   scaffoldComponentId: string
   inputType: ExecutionInputType
@@ -67,6 +72,7 @@ export type CreateExecutionEntryDto = {
   notes?: string
   crewId?: string
   laborMode?: ExecutionLaborMode
+  functionQuantities?: ExecutionFunctionQuantityInput[]
   scaffoldComponentIds?: string[]
   scaffoldComponentAdvances?: ExecutionComponentAdvanceInput[]
   crewSize?: number
@@ -93,24 +99,21 @@ export type QueuedExecutionEntryPayload = {
 }
 
 export type EmergencyScaffoldComponentDraft = {
-  category?: string
+  componentTypeId: string
+  componentTypeCode?: string
   name: string
   description?: string
-  measurementUnit?: 'M3' | 'M2' | 'LINEAR_M' | 'UNIDADE'
-  repeatCount?: number
+  measurementUnit: 'M3' | 'M2' | 'UNIDADE'
   height?: number
   width?: number
   length?: number
   plannedQuantity?: number
-  trackAssembly?: boolean
-  trackDisassembly?: boolean
 }
 
 export type EmergencyScaffoldDraft = {
   localId: string
   mobileLocalId?: string
   code?: string
-  quantity?: number
   scaffoldTypeId: string
   companyId: string
   unitId: string
