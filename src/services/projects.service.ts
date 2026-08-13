@@ -8,7 +8,7 @@ type Scope = {
 }
 
 function cacheKey(scope: Scope) {
-  return `projects:${scope.unitId}:${scope.contractId}`
+  return `projects:v2:${scope.unitId}:${scope.contractId}`
 }
 
 export async function fetchProjects(scope: Scope) {
@@ -16,15 +16,20 @@ export async function fetchProjects(scope: Scope) {
     params: {
       contractId: scope.contractId,
       unitId: scope.unitId,
-      status: 'ATIVO',
+      // A API normaliza os valores atuais (`active`) e legados (`ATIVO`).
+      status: 'active',
     },
     headers: {
       'X-Selected-Unit-Id': scope.unitId,
       'X-Selected-Contract-Id': scope.contractId,
     },
   })
-  await setReferenceCache(cacheKey(scope), projects)
-  return projects
+  const scopedProjects = projects.filter(
+    (project) =>
+      !project.contractId || project.contractId === scope.contractId,
+  )
+  await setReferenceCache(cacheKey(scope), scopedProjects)
+  return scopedProjects
 }
 
 export async function getCachedProjects(scope: Scope) {
