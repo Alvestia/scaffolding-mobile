@@ -1,5 +1,9 @@
 # Scaffold Mobile
 
+eas build --platform android --profile preview
+
+outras, development e production
+
 Aplicativo Expo/React Native para operação de campo do Scaffold, alinhado à API desta plataforma e preparado para uso offline-first.
 
 ## Funcionalidades
