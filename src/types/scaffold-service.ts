@@ -33,6 +33,7 @@ export type QueueServiceItem = {
   workOrderId?: string | null
   type: ScaffoldServiceType
   plannedUnit: MeasurementUnit
+  quantityVersion?: number
   plannedQuantity: number
   executedQuantity: number
   progress: number

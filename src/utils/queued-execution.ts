@@ -16,6 +16,7 @@ export function normalizeQueuedExecutionPayload(
 
     return {
       entry,
+      basisSnapshot: (payload as QueuedExecutionEntryPayload).basisSnapshot,
       scaffoldId:
         typeof (payload as QueuedExecutionEntryPayload).scaffoldId === 'string'
           ? (payload as QueuedExecutionEntryPayload).scaffoldId
@@ -60,6 +61,7 @@ function normalizeEntry(value: object): CreateExecutionEntryDto {
 
   return {
     clientMutationId: entry.clientMutationId,
+    expectedBasisVersion: entry.expectedBasisVersion,
     scaffoldServiceId: entry.scaffoldServiceId ?? '',
     operationType: entry.operationType!,
     inputType: entry.inputType!,

@@ -21,6 +21,14 @@
       "permissions": [
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT"
+      ],
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "web": {
@@ -39,14 +47,29 @@
         }
       ],
       "expo-sqlite",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": false
+        }
+      ],
       [
         "expo-local-authentication",
         {
           "faceIDPermission": "Permita que o Scaffold Mobile use o Face ID para desbloquear sua sessao."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "./plugins/with-android-security",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Permita que o Scaffold Mobile use a câmera para registrar evidências de execuções e desvios.",
+          "photosPermission": "Selecione fotos para anexar como evidências de execuções e desvios no Scaffold Mobile.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

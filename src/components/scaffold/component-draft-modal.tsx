@@ -178,8 +178,8 @@ export function ComponentDraftModal({
   const content = (
     <KeyboardAvoidingView
       style={styles.overlay}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      enabled={Platform.OS !== 'web'}
     >
       <Pressable style={styles.backdrop} onPress={handleClose} />
       <View style={styles.sheet}>
@@ -187,7 +187,6 @@ export function ComponentDraftModal({
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         >
           <View style={styles.handle} />
           <View style={styles.header}>

@@ -1,3 +1,4 @@
+import { canUseOfflineFallback } from '@/utils/offline-fallback'
 import { useQuery } from '@tanstack/react-query'
 import { useConnectivityStore } from '@/store/connectivity-store'
 import { fetchCrews, getCachedCrews } from '@/services/crews.service'
@@ -28,6 +29,7 @@ export function useCrews(scope: Scope) {
           unitId: scope.unitId,
         })
       } catch (error) {
+        if (!canUseOfflineFallback(error)) throw error
         const cached = await getCachedCrews(scope.contractId)
         if (cached.length > 0) {
           return cached

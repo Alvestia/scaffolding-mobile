@@ -32,7 +32,7 @@ O app não possui fluxo local de primeiro acesso/troca de senha nem cadastro de 
 
 ## Sessão segura
 
-O login `MOBILE` cria uma sessão de dispositivo. O access token é curto e fica somente em memória; a credencial revogável é guardada no SecureStore. No aplicativo nativo, essa é a proteção equivalente apropriada — `HttpOnly` se aplica ao cookie usado pela aplicação web.
+O login `MOBILE` cria uma sessão de dispositivo. O access token é curto e, junto com a credencial revogável, é guardado no SecureStore para retomada da sessão offline. No Android/iOS, a indisponibilidade do SecureStore bloqueia a operação; não há fallback para armazenamento comum. No aplicativo nativo, essa é a proteção equivalente apropriada — `HttpOnly` se aplica ao cookie usado pela aplicação web.
 
 Rotas consumidas:
 
@@ -79,10 +79,72 @@ No emulador Android, a API local normalmente deve usar `10.0.2.2` em vez de `loc
 ```bash
 npm run typecheck
 npm run lint
-npm run test:phase3
+npm run test:mobile
 npm run security:secrets
 npm run export:web
 ```
 
 
 
+
+## APK local, sem usar a cota de builds do EAS
+
+O perfil `preview` já contém `android.buildType: apk` e a URL HTTPS da API.
+O APK funciona sem o servidor Metro. Execute na pasta `scaffolding-mobile`:
+
+```bash
+npm run build:apk:local
+```
+
+Equivalente:
+
+```bash
+eas build --platform android --profile preview --local --output ./scaffold-mobile.apk
+```
+
+O arquivo final será `scaffold-mobile.apk`. A compilação ocorre nesta máquina.
+O EAS ainda exige autenticação (`eas login`) e acesso para consultar o projeto
+ou obter as credenciais de assinatura configuradas. Preserve a mesma chave de
+assinatura para atualizar uma instalação anterior.
+
+Pré-requisitos: Node 24, EAS CLI, JDK 17 e Android SDK/NDK compatíveis com o
+Expo SDK 55. Instale pelo Android Studio/SDK Manager a plataforma Android 36,
+Build Tools e NDK exigidos pelo projeto gerado; configure `JAVA_HOME`,
+`ANDROID_HOME` e o `PATH` das ferramentas. Confira `java -version`,
+`adb --version` e `sdkmanager --list_installed` antes do build.
+
+As variáveis deste WSL foram configuradas em `~/.config/android/env.sh`,
+carregado por `~/.bashrc` e `~/.profile`:
+
+```bash
+export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+export ANDROID_HOME="$HOME/Android/Sdk"
+```
+
+Para atualizar um terminal que já estava aberto:
+
+```bash
+source ~/.config/android/env.sh
+```
+
+O SDK deste projeto utiliza Android 36, Build Tools 36.0.0, NDK
+27.1.12297006 e CMake 3.22.1. Não é necessário instalar Gradle globalmente;
+o build utiliza o wrapper do projeto Android gerado.
+
+Em WSL, as ferramentas precisam estar disponíveis dentro do Linux. O Expo
+não oferece suporte oficial a builds locais em Windows/WSL; Linux e macOS são
+suportados. Não é necessário pagar um plano para compilar na própria máquina.
+
+Para a Google Play, o perfil `production` continua gerando AAB:
+
+```bash
+eas build --platform android --profile production --local --output ./scaffold-mobile.aab
+```
+
+Esse perfil usa a versão remota e `autoIncrement`. Um APK local bem-sucedido
+não substitui a homologação do AAB, das bibliotecas de 16 KB e dos formulários
+do Play Console.
+
+Referências: [EAS local](https://docs.expo.dev/build-reference/local-builds/),
+[APK](https://docs.expo.dev/build-reference/apk/),
+[build de release local](https://docs.expo.dev/guides/local-app-production/).

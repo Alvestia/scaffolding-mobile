@@ -183,7 +183,7 @@ export default function SyncPage() {
   }
 
   const handleEditExecution = (item: OutboxItem) => {
-    if (item.entityType !== OutboxEntityType.EXECUTION_ENTRY) {
+    if (item.entityType !== OutboxEntityType.EXECUTION_ENTRY || item.remoteId || item.syncStatus === SyncStatus.SYNCING) {
       return
     }
 
@@ -361,7 +361,7 @@ export default function SyncPage() {
                   ) : null}
 
                   <View style={styles.itemActions}>
-                    {item.entityType === OutboxEntityType.EXECUTION_ENTRY ? (
+                    {item.entityType === OutboxEntityType.EXECUTION_ENTRY && !item.remoteId && item.syncStatus !== SyncStatus.SYNCING ? (
                       <Pressable
                         onPress={() => handleEditExecution(item)}
                         style={({ pressed }) => [

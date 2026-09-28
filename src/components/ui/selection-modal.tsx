@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons'
 import { createPortal } from 'react-dom'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   FlatList,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -41,6 +42,8 @@ type SelectionModalProps = {
   emptyMessage?: string
 }
 
+const EMPTY_SELECTION: string[] = []
+
 export function SelectionModal({
   visible,
   title,
@@ -50,7 +53,7 @@ export function SelectionModal({
   onSelect,
   onConfirm,
   selectedValue,
-  selectedValues = [],
+  selectedValues = EMPTY_SELECTION,
   multiple = false,
   confirmLabel = 'Aplicar selecao',
   searchPlaceholder = 'Buscar item',
@@ -59,13 +62,20 @@ export function SelectionModal({
   const insets = useSafeAreaInsets()
   const [search, setSearch] = useState('')
   const [draftValues, setDraftValues] = useState<string[]>(selectedValues)
+  const wasVisible = useRef(false)
+  const listRef = useRef<FlatList<SelectionOption>>(null)
 
   useEffect(() => {
-    if (visible) {
+    if (visible && !wasVisible.current) {
       setSearch('')
       setDraftValues(selectedValues)
     }
+    wasVisible.current = visible
   }, [selectedValues, visible])
+
+  useEffect(() => {
+    if (visible) listRef.current?.scrollToOffset({ offset: 0, animated: false })
+  }, [search, visible])
 
   const filteredOptions = useMemo(() => {
     const normalized = search.trim().toLowerCase()
@@ -85,9 +95,7 @@ export function SelectionModal({
 
   const toggleDraftValue = (value: string) => {
     setDraftValues((current) =>
-      current.includes(value)
-        ? current.filter((item) => item !== value)
-        : [...current, value],
+      current.includes(value) ? current.filter((item) => item !== value) : [...current, value],
     )
   }
 
@@ -97,7 +105,9 @@ export function SelectionModal({
   }
 
   const content = (
-    <View
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      enabled={Platform.OS !== 'web'}
       style={[
         styles.overlay,
         Platform.OS === 'web'
@@ -109,16 +119,7 @@ export function SelectionModal({
       ]}
     >
       <Pressable style={styles.backdrop} onPress={handleClose} />
-      <View
-        style={[
-          styles.sheet,
-          Platform.OS === 'web'
-            ? null
-            : {
-                paddingBottom: spacing.xl + Math.max(insets.bottom, spacing.xs),
-              },
-        ]}
-      >
+      <View style={styles.sheet}>
         <View style={styles.header}>
           <View style={styles.headerText}>
             <Text style={styles.title}>{title}</Text>
@@ -137,11 +138,20 @@ export function SelectionModal({
             placeholder={searchPlaceholder}
             placeholderTextColor="#8AA0A8"
             style={styles.searchInput}
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+            onSubmitEditing={blurActiveElement}
           />
         </View>
 
         <FlatList
+          ref={listRef}
+          style={styles.list}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           data={filteredOptions}
+          extraData={multiple ? draftValues : selectedValue}
           keyExtractor={(item) => item.value}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
@@ -177,19 +187,10 @@ export function SelectionModal({
                   {item.sublabel ? (
                     <Text style={styles.optionSublabel}>{item.sublabel}</Text>
                   ) : null}
-                  {item.caption ? (
-                    <Text style={styles.optionCaption}>{item.caption}</Text>
-                  ) : null}
+                  {item.caption ? <Text style={styles.optionCaption}>{item.caption}</Text> : null}
                 </View>
-                <View
-                  style={[
-                    styles.checkWrap,
-                    isSelected ? styles.checkWrapSelected : null,
-                  ]}
-                >
-                  {isSelected ? (
-                    <Ionicons name="checkmark" size={16} color={colors.white} />
-                  ) : null}
+                <View style={[styles.checkWrap, isSelected ? styles.checkWrapSelected : null]}>
+                  {isSelected ? <Ionicons name="checkmark" size={16} color={colors.white} /> : null}
                 </View>
               </Pressable>
             )
@@ -219,7 +220,7 @@ export function SelectionModal({
           </View>
         ) : null}
       </View>
-    </View>
+    </KeyboardAvoidingView>
   )
 
   if (!visible) {
@@ -262,13 +263,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(23, 56, 66, 0.36)',
   },
   sheet: {
-    maxHeight: '88%',
+    height: '88%',
     borderTopLeftRadius: radius.xxl,
     borderTopRightRadius: radius.xxl,
     backgroundColor: colors.surface,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.md,
     gap: spacing.sm,
     borderTopWidth: 1,
     borderColor: colors.border,
@@ -322,6 +323,10 @@ const styles = StyleSheet.create({
   listContent: {
     gap: spacing.xs,
     paddingBottom: spacing.sm,
+  },
+  list: {
+    flex: 1,
+    minHeight: 0,
   },
   optionRow: {
     borderRadius: radius.md,

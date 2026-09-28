@@ -19,7 +19,7 @@ import {
   setBiometricLoginEnabled as setBiometricLoginPreference,
 } from '@/services/session-storage'
 import { refreshDeviceSession } from '@/services/device-session.service'
-import { setOfflineOwner } from '@/security/offline-owner'
+import { assertOfflineOwnerContext, captureOfflineOwnerContext, setOfflineOwner } from '@/security/offline-owner'
 import { useOperationalContextStore } from '@/store/operational-context-store'
 
 async function activateOfflineOwner(user: AuthUser) {
@@ -192,9 +192,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       return null
     }
 
+    const ownerContext = captureOfflineOwnerContext()
     const session = await refreshDeviceSession(deviceCredential)
-    await activateOfflineOwner(session.user)
+    assertOfflineOwnerContext(ownerContext)
+    if (session.user.id !== ownerContext.owner.userId || session.user.tenantId !== ownerContext.owner.tenantId) {
+      throw new Error('A renovação retornou uma identidade diferente da sessão ativa.')
+    }
     await persistSession(session)
+    assertOfflineOwnerContext(ownerContext)
+    useOperationalContextStore.getState().activateOwner(session.user)
     set({
       accessToken: session.accessToken,
       user: session.user,

@@ -1,3 +1,4 @@
+import { canUseOfflineFallback } from '@/utils/offline-fallback'
 import { useQuery } from '@tanstack/react-query'
 import { fetchDeviationTypes, getCachedDeviationTypes } from '@/services/deviation-types.service'
 import { useAuthStore } from '@/store/auth-store'
@@ -19,6 +20,7 @@ export function useDeviationTypes() {
       try {
         return await fetchDeviationTypes()
       } catch (error) {
+        if (!canUseOfflineFallback(error)) throw error
         const cached = await getCachedDeviationTypes()
         if (cached.length > 0) {
           return cached

@@ -314,6 +314,14 @@ export default function QueuePage() {
     workOrderFilter,
   ])
 
+  const scaffoldCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const item of visibleItems) {
+      counts.set(item.scaffoldId, (counts.get(item.scaffoldId) ?? 0) + 1)
+    }
+    return counts
+  }, [visibleItems])
+
   const setFilterDateFromPicker = (field: DateFieldKey, date: Date) => {
     if (field === 'startDate') {
       setStartDate(formatDate(date))
@@ -404,10 +412,7 @@ export default function QueuePage() {
                   </View>
                   <View style={styles.groupCountPill}>
                     <Text style={styles.groupCountLabel}>
-                      {
-                        visibleItems.filter((service) => service.scaffoldId === item.scaffoldId)
-                          .length
-                      }
+                      {scaffoldCounts.get(item.scaffoldId) ?? 0}
                     </Text>
                   </View>
                 </View>
@@ -851,7 +856,7 @@ export default function QueuePage() {
               return
             }
 
-            void Promise.all([runSyncNow(scope), queueQuery.refetch()])
+            void runSyncNow(scope).then(() => queueQuery.refetch())
           }}
           disabled={!canRefreshQueue}
           style={({ pressed }) => [

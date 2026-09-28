@@ -6,27 +6,38 @@ export function useAppBootstrap() {
   const hydrate = useAuthStore((state) => state.hydrate)
   const isHydrated = useAuthStore((state) => state.isHydrated)
   const [isDatabaseReady, setIsDatabaseReady] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
+    setError(null)
+    setIsDatabaseReady(false)
 
     async function bootstrap() {
-      await initializeDatabase()
-      if (!cancelled) {
+      try {
+        await initializeDatabase()
+        if (cancelled) return
+        await hydrate()
+        if (cancelled) return
         setIsDatabaseReady(true)
+      } catch {
+        if (!cancelled) {
+          setError(
+            'Não foi possível abrir os dados deste aparelho. Tente novamente. Seus registros locais serão preservados.',
+          )
+        }
       }
-
-      await hydrate()
     }
-
     void bootstrap()
-
     return () => {
       cancelled = true
     }
-  }, [hydrate])
+  }, [hydrate, attempt])
 
   return {
-    isReady: isHydrated && isDatabaseReady,
+    isReady: !error && isHydrated && isDatabaseReady,
+    error,
+    retry: () => setAttempt((value) => value + 1),
   }
 }

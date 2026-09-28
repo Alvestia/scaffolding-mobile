@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NetworkStatusIndicator } from '@/components/app/network-status-indicator'
 import { Banner } from '@/components/ui/banner'
+import { Button } from '@/components/ui/button'
 import { kaeferWordmark } from '@/constants/brand-assets'
 import { colors, radius, spacing } from '@/constants/theme'
 import { useExecutionQueue } from '@/hooks/use-execution-queue'
@@ -28,6 +29,7 @@ import { formatShortDateTime } from '@/utils/date'
 import { getErrorMessage } from '@/utils/error'
 import { getActiveDeviceCredential } from '@/services/session-storage'
 import { revokeDeviceSession } from '@/services/device-session.service'
+import { invalidateSyncedQueries } from '@/utils/sync-query-cache'
 
 export default function HomePage() {
   const clearSession = useAuthStore((state) => state.clearSession)
@@ -68,7 +70,7 @@ export default function HomePage() {
         : null,
     [context.companyId, context.contractId, context.unitId],
   )
-  const canRunManualSync = Boolean(syncScope && isConnected && !isSyncing && !queueQuery.isFetching)
+  const canRunManualSync = Boolean(syncScope && isConnected && !isSyncing && !manualSyncVisible && !queueQuery.isFetching)
   const manualSyncComplete =
     manualSyncVisible && manualSyncSteps.every((step) => step.status === 'done')
 
@@ -105,7 +107,7 @@ export default function HomePage() {
   }
 
   const handleManualSync = async () => {
-    if (!syncScope || !isConnected || isSyncing || queueQuery.isFetching) {
+    if (!syncScope || !canRunManualSync) {
       return
     }
 
@@ -115,9 +117,11 @@ export default function HomePage() {
 
     try {
       await runManualSyncNow(syncScope, setManualSyncSteps)
-      await queueQuery.refetch()
+      await invalidateSyncedQueries(queryClient)
     } catch (error) {
       setManualSyncError(getErrorMessage(error, 'Nao foi possivel atualizar a base local.'))
+    } finally {
+      setManualSyncVisible(false)
     }
   }
 
@@ -297,6 +301,19 @@ export default function HomePage() {
                 )}
               </View>
             </View>
+
+            {manualSyncError && !manualSyncVisible ? (
+              <Banner
+                tone="danger"
+                title="Não foi possível concluir a atualização"
+                description={manualSyncError}
+                action={
+                  <Button variant="secondary" onPress={() => setManualSyncError(null)}>
+                    Fechar aviso
+                  </Button>
+                }
+              />
+            ) : null}
 
             {manualSyncVisible ? (
               <View style={styles.syncProgressCard}>

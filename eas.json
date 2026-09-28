@@ -14,7 +14,7 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api-scaffolding.ripbr.com.br",
+        "EXPO_PUBLIC_API_URL": "https://api-scaffolding.kaeferbrasil.com.br",
         "EXPO_PUBLIC_REQUEST_TIMEOUT_MS": "30000"
       },
       "android": {
@@ -24,7 +24,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api-scaffolding.ripbr.com.br",
+        "EXPO_PUBLIC_API_URL": "https://api-scaffolding.kaeferbrasil.com.br",
         "EXPO_PUBLIC_REQUEST_TIMEOUT_MS": "30000"
       },
       "android": {

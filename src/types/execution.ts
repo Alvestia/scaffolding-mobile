@@ -62,6 +62,7 @@ export type ExecutionDraft = {
 }
 
 export type CreateExecutionEntryDto = {
+  expectedBasisVersion?: number
   clientMutationId?: string
   scaffoldServiceId: string
   operationType: ExecutionOperationType
@@ -91,6 +92,7 @@ export type ExecutionEvidenceDraft = {
 }
 
 export type QueuedExecutionEntryPayload = {
+  basisSnapshot?: { version: number; quantity: number; unit: string }
   entry: CreateExecutionEntryDto
   scaffoldId?: string
   adjustments?: ExecutionMeasurementAdjustmentDraft[]

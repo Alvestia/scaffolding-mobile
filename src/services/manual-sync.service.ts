@@ -7,6 +7,7 @@ import { fetchEmployees } from '@/services/employees.service'
 import { fetchProjects } from '@/services/projects.service'
 import { fetchQueueServices } from '@/services/scaffold-services.service'
 import { fetchScaffoldTypes } from '@/services/scaffold-types.service'
+import { fetchScaffoldComponentTypes } from '@/services/scaffold-component-types.service'
 import { fetchLatestScaffold } from '@/services/scaffolds.service'
 import { fetchWorkOrders } from '@/services/work-orders.service'
 import { fetchWorkFunctions } from '@/services/work-functions.service'
@@ -46,8 +47,8 @@ type StepDefinition = {
 
 const STEP_DEFINITIONS: StepDefinition[] = [
   { key: 'outbox', label: 'Pendências' },
-  { key: 'scaffolds', label: 'Scaffolds' },
-  { key: 'services', label: 'Services' },
+  { key: 'scaffolds', label: 'Andaimes' },
+  { key: 'services', label: 'Serviços' },
   { key: 'crews', label: 'Equipes' },
   { key: 'employees', label: 'Funcionários' },
   { key: 'catalogs', label: 'Catálogos' },
@@ -111,15 +112,21 @@ export async function runManualSync(
 
   await runStep('outbox', () => runFullSync(scope, { includeQueue: false }))
   queueItems = await runStep('scaffolds', async () => {
-    const [items] = await Promise.all([fetchQueueServices(scope), fetchLatestScaffold(scope)])
-    return items
+    const [queueResult, scaffoldResult] = await Promise.allSettled([
+      fetchQueueServices(scope),
+      fetchLatestScaffold(scope),
+    ])
+    if (queueResult.status === 'rejected') throw queueResult.reason
+    if (scaffoldResult.status === 'rejected') throw scaffoldResult.reason
+    return queueResult.value
   })
   await runStep('services', () => queueCacheRepository.replaceForScope(queueItems, scope))
   await runStep('crews', () => fetchCrews(scope))
   await runStep('employees', () => fetchEmployees(scope))
   await runStep('catalogs', async () => {
-    await Promise.all([
+    const results = await Promise.allSettled([
       fetchScaffoldTypes(),
+      fetchScaffoldComponentTypes(),
       fetchDeviationTypes(),
       fetchProjects(scope),
       fetchWorkFunctions(scope),
@@ -133,6 +140,8 @@ export async function runManualSync(
         contractId: scope.contractId,
       }),
     ])
+    const failure = results.find((result) => result.status === 'rejected')
+    if (failure?.status === 'rejected') throw failure.reason
   })
 
   await syncStateRepository.set('lastSyncAt', nowIso())

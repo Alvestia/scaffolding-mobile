@@ -1,3 +1,4 @@
+import { api } from '@/api/client'
 import { getAllPages } from '@/api/pagination'
 import type { QueueServiceItem } from '@/types/scaffold-service'
 
@@ -47,4 +48,37 @@ export async function fetchQueueServices(scope: Scope, filters?: QueueServiceFil
   } as never)
 
   return data
+}
+
+// A service can leave the active queue after a revision. Read it directly so a
+// pending draft can still compare its original basis with the current one.
+export async function fetchQueueService(serviceId: string, scope: Scope, signal?: AbortSignal) {
+  const { data } = await api.get<QueueServiceItem>(`/scaffold-services/${encodeURIComponent(serviceId)}`, {
+    signal,
+    headers: {
+      'X-Selected-Unit-Id': scope.unitId,
+      'X-Selected-Contract-Id': scope.contractId,
+    },
+    skipOrgScope: true,
+  } as never)
+
+  // Do not persist the execution/audit history returned by the detail endpoint.
+  return {
+    id: data.id,
+    scaffoldId: data.scaffoldId,
+    workOrderId: data.workOrderId,
+    type: data.type,
+    plannedUnit: data.plannedUnit,
+    quantityVersion: data.quantityVersion,
+    plannedQuantity: data.plannedQuantity,
+    executedQuantity: data.executedQuantity,
+    progress: data.progress,
+    status: data.status,
+    description: data.description,
+    startForecast: data.startForecast,
+    endForecast: data.endForecast,
+    scaffold: data.scaffold,
+    workOrder: data.workOrder,
+    scaffoldComponent: data.scaffoldComponent,
+  } satisfies QueueServiceItem
 }

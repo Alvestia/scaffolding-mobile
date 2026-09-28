@@ -1,3 +1,4 @@
+import { canUseOfflineFallback } from '@/utils/offline-fallback'
 import { useQuery } from '@tanstack/react-query'
 import { useConnectivityStore } from '@/store/connectivity-store'
 import { fetchProjects, getCachedProjects } from '@/services/projects.service'
@@ -13,7 +14,6 @@ export function useProjects(scope: Scope) {
   return useQuery({
     queryKey: ['projects', scope.contractId, scope.unitId, isConnected],
     enabled: Boolean(scope.contractId && scope.unitId),
-    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       if (!scope.contractId || !scope.unitId) return []
 
@@ -26,6 +26,7 @@ export function useProjects(scope: Scope) {
       try {
         return await fetchProjects(resolvedScope)
       } catch (error) {
+        if (!canUseOfflineFallback(error)) throw error
         const cached = await getCachedProjects(resolvedScope)
         if (cached.length > 0) {
           return cached

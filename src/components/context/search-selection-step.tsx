@@ -1,6 +1,15 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useMemo, useState } from 'react'
-import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { colors, spacing } from '@/constants/theme'
 import { blurActiveElement } from '@/utils/focus'
@@ -63,7 +72,10 @@ export function SearchSelectionStep({
 
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
-      <View style={styles.page}>
+      <KeyboardAvoidingView
+        style={styles.page}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.header}>
           <Pressable
             onPress={() => {
@@ -112,7 +124,11 @@ export function SearchSelectionStep({
         </View>
 
         <FlatList
+          style={styles.list}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           data={filteredItems}
+          extraData={selectedId}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
@@ -121,7 +137,10 @@ export function SearchSelectionStep({
 
             return (
               <Pressable
-                onPress={() => onSelect(item.id)}
+                onPress={() => {
+                  blurActiveElement()
+                  onSelect(item.id)
+                }}
                 style={({ pressed }) => [
                   styles.row,
                   selected ? styles.rowSelected : null,
@@ -175,7 +194,7 @@ export function SearchSelectionStep({
             />
           </Pressable>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }
@@ -270,6 +289,9 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 120,
+  },
+  list: {
+    flex: 1,
   },
   row: {
     minHeight: 58,

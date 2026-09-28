@@ -11,6 +11,8 @@ import type { DeviationEvidenceDraft } from '@/types/operational-deviation'
 import { createLocalId } from '@/utils/id'
 import { buildOwnedDirectorySegment } from '@/security/offline-owner'
 import { checksumBase64 } from '@/utils/checksum'
+import { validateEvidenceAsset } from '@/utils/evidence-validation'
+import { getErrorMessage } from '@/utils/error'
 
 const MAX_EVIDENCE_COUNT = 4
 function getEvidenceDir() {
@@ -116,6 +118,7 @@ export function DeviationEvidencePicker({
       return
     }
 
+    assets.slice(0, availableSlots).forEach(validateEvidenceAsset)
     const normalized = await Promise.all(
       assets.slice(0, availableSlots).map((asset) => normalizeAsset(asset)),
     )
@@ -129,24 +132,20 @@ export function DeviationEvidencePicker({
   const pickFromLibrary = async () => {
     try {
       setIsPicking(true)
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-
-      if (!permission.granted) {
-        Alert.alert('Permissao necessaria', 'Libere o acesso as fotos para anexar evidencias.')
-        return
-      }
-
+      // The system picker grants access only to the selected photos.
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsMultipleSelection: true,
         base64: true,
         mediaTypes: ['images'],
         quality: 0.5,
-        selectionLimit: MAX_EVIDENCE_COUNT,
+        selectionLimit: Math.max(1, MAX_EVIDENCE_COUNT - value.length),
       })
 
       if (!result.canceled) {
         await appendAssets(result.assets)
       }
+    } catch (error) {
+      Alert.alert('Não foi possível anexar a foto', getErrorMessage(error, 'Tente novamente ou selecione outra imagem.'))
     } finally {
       setIsPicking(false)
     }
@@ -171,6 +170,8 @@ export function DeviationEvidencePicker({
       if (!result.canceled) {
         await appendAssets(result.assets)
       }
+    } catch (error) {
+      Alert.alert('Não foi possível anexar a foto', getErrorMessage(error, 'Tente novamente ou selecione outra imagem.'))
     } finally {
       setIsPicking(false)
     }

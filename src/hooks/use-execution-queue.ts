@@ -2,14 +2,14 @@ import { useQuery } from '@tanstack/react-query'
 import { outboxRepository } from '@/database/repositories/outbox-repository'
 import { queueCacheRepository } from '@/database/repositories/queue-cache-repository'
 import { localScaffoldServiceRepository } from '@/database/repositories/local-scaffold-service-repository'
-import {
-  fetchQueueServices,
-  type QueueServiceFilters,
-} from '@/services/scaffold-services.service'
+import { fetchQueueServices, type QueueServiceFilters } from '@/services/scaffold-services.service'
 import { useAuthStore } from '@/store/auth-store'
 import { useConnectivityStore } from '@/store/connectivity-store'
 import type { QueueServiceItem } from '@/types/scaffold-service'
 import { localServiceToQueueItem } from '@/utils/local-scaffold'
+import { matchesExecutionBasis } from '@/utils/execution-basis'
+import { canUseOfflineFallback } from '@/utils/offline-fallback'
+import { matchesQueueFilters } from '@/utils/queue-filters'
 
 type Scope = {
   contractId: string | null
@@ -23,8 +23,11 @@ export function useExecutionQueue(scope: Scope, filters?: QueueServiceFilters) {
 
   const hasFilters = Boolean(
     (filters?.statuses && filters.statuses.length > 0) ||
-      filters?.startForecast ||
-      filters?.endForecast,
+    filters?.startForecast ||
+    filters?.endForecast ||
+    filters?.type ||
+    filters?.scaffoldId ||
+    filters?.workOrderId,
   )
 
   return useQuery({
@@ -35,6 +38,10 @@ export function useExecutionQueue(scope: Scope, filters?: QueueServiceFilters) {
       filters?.statuses?.join(',') ?? null,
       filters?.startForecast ?? null,
       filters?.endForecast ?? null,
+      filters?.type ?? null,
+      filters?.scaffoldId ?? null,
+      filters?.workOrderId ?? null,
+      isConnected,
     ],
     enabled: isHydrated && Boolean(accessToken && scope.contractId && scope.unitId),
     queryFn: async () => {
@@ -54,11 +61,26 @@ export function useExecutionQueue(scope: Scope, filters?: QueueServiceFilters) {
         contractId: scope.contractId,
         unitId: scope.unitId,
       })
+      // Pending advances can move an unstarted remote service into "in progress".
+      // Apply the requested status after overlaying those local advances.
+      const sourceFilters =
+        pendingExecutions.size > 0
+          ? {
+              ...filters,
+              statuses: [...new Set(['NAO_INICIADO', 'EM_EXECUCAO', ...(filters?.statuses ?? [])])],
+            }
+          : filters
       const localItems = localServices.map(localServiceToQueueItem)
 
       const applyPendingExecutions = (items: QueueServiceItem[]): QueueServiceItem[] =>
         items.reduce<QueueServiceItem[]>((acc, item) => {
-          const executions = pendingExecutions.get(item.id)
+          const executions = pendingExecutions.get(item.id)?.filter((entry) =>
+            matchesExecutionBasis(item, {
+              version: entry.expectedBasisVersion ?? 0,
+              quantity: entry.basisSnapshot?.quantity ?? null,
+              unit: entry.basisSnapshot?.unit ?? '',
+            }),
+          )
           if (!executions || executions.length === 0) {
             acc.push(item)
             return acc
@@ -74,9 +96,8 @@ export function useExecutionQueue(scope: Scope, filters?: QueueServiceFilters) {
           }
 
           const newExecuted = item.executedQuantity + addedQty
-          const newProgress = item.plannedQuantity > 0
-            ? (newExecuted / item.plannedQuantity) * 100
-            : 0
+          const newProgress =
+            item.plannedQuantity > 0 ? (newExecuted / item.plannedQuantity) * 100 : 0
 
           if (newProgress >= 100) {
             return acc
@@ -91,15 +112,20 @@ export function useExecutionQueue(scope: Scope, filters?: QueueServiceFilters) {
           return acc
         }, [])
 
+      const mergeItems = (remoteItems: QueueServiceItem[]) =>
+        applyPendingExecutions([...localItems, ...remoteItems]).filter((item) =>
+          matchesQueueFilters(item, filters),
+        )
+
       if (!isConnected) {
         const cachedItems = await queueCacheRepository.listByScope(
           {
             contractId: scope.contractId,
             unitId: scope.unitId,
           },
-          filters,
+          sourceFilters,
         )
-        return [...applyPendingExecutions(localItems), ...applyPendingExecutions(cachedItems)]
+        return mergeItems(cachedItems)
       }
 
       try {
@@ -108,7 +134,7 @@ export function useExecutionQueue(scope: Scope, filters?: QueueServiceFilters) {
             contractId: scope.contractId,
             unitId: scope.unitId,
           },
-          filters,
+          sourceFilters,
         )
 
         if (!hasFilters) {
@@ -118,18 +144,19 @@ export function useExecutionQueue(scope: Scope, filters?: QueueServiceFilters) {
           })
         }
 
-        return [...localItems, ...applyPendingExecutions(remoteItems)]
+        return mergeItems(remoteItems)
       } catch (error) {
+        if (!canUseOfflineFallback(error)) throw error
         const cachedItems = await queueCacheRepository.listByScope(
           {
             contractId: scope.contractId,
             unitId: scope.unitId,
           },
-          filters,
+          sourceFilters,
         )
 
         if (cachedItems.length > 0 || localItems.length > 0) {
-          return [...applyPendingExecutions(localItems), ...applyPendingExecutions(cachedItems)]
+          return mergeItems(cachedItems)
         }
 
         throw error

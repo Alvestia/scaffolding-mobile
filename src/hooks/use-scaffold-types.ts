@@ -1,3 +1,4 @@
+import { canUseOfflineFallback } from '@/utils/offline-fallback'
 import { useQuery } from '@tanstack/react-query'
 import { fetchScaffoldTypes, getCachedScaffoldTypes } from '@/services/scaffold-types.service'
 import { useAuthStore } from '@/store/auth-store'
@@ -19,6 +20,7 @@ export function useScaffoldTypes() {
       try {
         return await fetchScaffoldTypes()
       } catch (error) {
+        if (!canUseOfflineFallback(error)) throw error
         const cached = await getCachedScaffoldTypes()
         if (cached.length > 0) {
           return cached

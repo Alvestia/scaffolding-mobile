@@ -6,6 +6,7 @@ import DateTimePicker, {
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -68,6 +69,7 @@ import {
   normalizeMeasuredDimensions,
 } from '@/utils/execution'
 import { buildInheritedComponentAdvances } from '@/utils/component-advances'
+import { matchesExecutionBasis } from '@/utils/execution-basis'
 import { getErrorMessage } from '@/utils/error'
 import { blurActiveElement } from '@/utils/focus'
 import { createLocalId } from '@/utils/id'
@@ -242,7 +244,7 @@ export default function ExecuteServicePage() {
   const lastCrewRef = useRef<string | null>(null)
 
   const serviceQuery = useQueueServiceDetail(serviceId ?? null, { contractId, unitId }, isConnected)
-  const service = serviceQuery.data
+  const service = serviceQuery.isError ? undefined : serviceQuery.data
   const scope =
     contractId && unitId
       ? {
@@ -252,6 +254,7 @@ export default function ExecuteServicePage() {
       : null
 
   const [entryMode, setEntryMode] = useState<EntryMode>('PERCENTUAL')
+  const [draftBasis, setDraftBasis] = useState<{ version: number; quantity: number | null; unit: string } | null>(null)
   const [quantityMode, setQuantityMode] = useState<QuantityMode>('direct')
   const [percentageValue, setPercentageValue] = useState('')
   const [directInputValue, setDirectInputValue] = useState('')
@@ -522,6 +525,10 @@ export default function ExecuteServicePage() {
         return
       }
 
+      if (draft.remoteId || draft.syncStatus === SyncStatus.SYNCING || draft.syncStatus === SyncStatus.SYNCED) {
+        setSubmitError('Este registro já foi enviado ou está em envio. Volte às pendências para retomar a sincronização.')
+        return
+      }
       const normalizedPayload = normalizeQueuedExecutionPayload(draft.payload)
 
       if (!normalizedPayload) {
@@ -529,6 +536,7 @@ export default function ExecuteServicePage() {
       }
 
       const payload = normalizedPayload.entry
+      setDraftBasis(normalizedPayload.basisSnapshot ?? { version: payload.expectedBasisVersion ?? 0, quantity: null, unit: '' })
       const isPercentual = payload.inputType === ExecutionInputType.PERCENTUAL
       const hydratedStart = getDateTimeFieldsFromIso(payload.startTime)
       const hydratedEnd = getDateTimeFieldsFromIso(payload.endTime)
@@ -759,7 +767,26 @@ export default function ExecuteServicePage() {
     scrollViewRef.current?.scrollTo({ y: 0, animated: true })
   }
 
+  useEffect(() => {
+    if (!draftLocalId && service && !draftBasis) setDraftBasis({ version: service.quantityVersion ?? 0, quantity: service.plannedQuantity, unit: service.plannedUnit })
+  }, [draftLocalId, service, draftBasis])
+  const basisChanged = Boolean(service && draftBasis && !matchesExecutionBasis(service, draftBasis))
+  const confirmBasis = (mode: 'PERCENTAGE' | 'QUANTITY' | 'REVIEW') => {
+    if (!service || !draftBasis) return
+    if (mode === 'QUANTITY' && draftBasis.quantity != null) {
+      const quantity = resolvedInputType === ExecutionInputType.PERCENTUAL ? resolvedInputValue * draftBasis.quantity / 100 : resolvedInputValue
+      setEntryMode('QUANTIDADE'); setQuantityMode('direct'); setDirectInputValue(String(Number(quantity.toFixed(6))))
+    } else if (mode === 'PERCENTAGE' && draftBasis.quantity) {
+      const percentage = resolvedInputType === ExecutionInputType.PERCENTUAL ? resolvedInputValue : resolvedInputValue * 100 / draftBasis.quantity
+      setEntryMode('PERCENTUAL'); setPercentageValue(String(Number(percentage.toFixed(6))))
+    } else { setEntryMode('QUANTIDADE'); setQuantityMode('direct'); setDirectInputValue(''); setPercentageValue('') }
+    setComponentAdvances([])
+    setDraftBasis({ version: service.quantityVersion ?? 0, quantity: service.plannedQuantity, unit: service.plannedUnit })
+    setSubmitError(null)
+  }
+
   const handleSubmit = async () => {
+    if (basisChanged || !draftBasis) { setSubmitError('A base foi revisada. Confira os valores e escolha como tratar este rascunho.'); return }
     if (isSubmitting) {
       return
     }
@@ -798,6 +825,7 @@ export default function ExecuteServicePage() {
       const localId = draftLocalId ?? createLocalId('execution')
       const entryPayload: CreateExecutionEntryDto = {
         scaffoldServiceId: service.id,
+        expectedBasisVersion: service.quantityVersion ?? 0,
         operationType: service.type,
         inputType: resolvedInputType,
         inputValue: resolvedInputValue,
@@ -816,6 +844,7 @@ export default function ExecuteServicePage() {
       }
 
       const payload: QueuedExecutionEntryPayload = {
+        basisSnapshot: { version: service.quantityVersion ?? 0, quantity: service.plannedQuantity, unit: service.plannedUnit },
         entry: entryPayload,
         scaffoldId: service.scaffoldId,
         adjustments: hasMeasurementAdjustments ? measurementAdjustments : [],
@@ -830,7 +859,7 @@ export default function ExecuteServicePage() {
         unitId: scope.unitId,
         syncStatus: SyncStatus.PENDING,
         payload,
-      })
+      }, { requireExisting: Boolean(draftLocalId) })
       await refreshState()
 
       if (isConnected && !draftLocalId) {
@@ -905,6 +934,13 @@ export default function ExecuteServicePage() {
             </View>
 
             <NetworkStatusIndicator />
+            {basisChanged && service && <View style={{ gap: 8, padding: 12 }}>
+              <Banner tone="warning" title="A quantidade do serviço mudou" description={`Base anterior: ${draftBasis?.quantity ?? 'não registrada'}. Base atual: ${service.plannedQuantity}. Confirme o tratamento do lançamento e confira novamente os componentes.`} />
+              {draftBasis?.quantity != null && draftBasis.unit === service.plannedUnit ? <>
+                <Pressable accessibilityRole="button" onPress={() => confirmBasis('PERCENTAGE')}><Text>Manter o percentual executado</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={() => confirmBasis('QUANTITY')}><Text>Manter a quantidade executada</Text></Pressable>
+              </> : <Pressable accessibilityRole="button" onPress={() => confirmBasis('REVIEW')}><Text>Conferir e informar os valores na nova base</Text></Pressable>}
+            </View>}
 
             {draftLocalId ? (
               <Banner
@@ -914,12 +950,22 @@ export default function ExecuteServicePage() {
               />
             ) : null}
 
-            {!service ? (
+            {serviceQuery.isPending && scope ? (
+              <View style={styles.emptyShell}>
+                <ActivityIndicator color={colors.primaryStrong} />
+                <Text>Carregando o serviço...</Text>
+              </View>
+            ) : !service ? (
               <View style={styles.emptyShell}>
                 <EmptyState
-                  title="Atividade indisponível"
-                  description="Volte para a fila, atualize a base e abra novamente este lançamento."
+                  title={serviceQuery.isError ? 'Não foi possível carregar o serviço' : 'Atividade indisponível'}
+                  description={serviceQuery.isError
+                    ? getErrorMessage(serviceQuery.error, 'Tente novamente quando a conexão estiver disponível.')
+                    : 'Confira o contrato selecionado e atualize a base para abrir este lançamento.'}
                 />
+                <Pressable accessibilityRole="button" onPress={() => void serviceQuery.refetch()}>
+                  <Text>Tentar novamente</Text>
+                </Pressable>
               </View>
             ) : (
               <>
@@ -945,7 +991,7 @@ export default function ExecuteServicePage() {
                               : styles.softPillLabelWarning,
                           ]}
                         >
-                          {service.status === 'EM_EXECUCAO' ? 'Em andamento' : 'Pendente'}
+                          {{ NAO_INICIADO: 'Pendente', EM_EXECUCAO: 'Em andamento', CONCLUIDO: 'Concluído', CANCELLED: 'Cancelado', NOT_EXECUTED: 'Não executado' }[service.status]}
                         </Text>
                       </View>
                     </View>

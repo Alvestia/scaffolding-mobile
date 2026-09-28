@@ -14,6 +14,13 @@ const BIOMETRIC_LOGIN_KEY = 'scaffold_mobile_biometric_login_enabled'
 type DeviceCredentialStorageMode = 'regular' | 'biometric'
 
 let activeDeviceCredential: string | null = null
+let sessionWrites: Promise<unknown> = Promise.resolve()
+
+function serializeSessionWrite(operation: () => Promise<void>) {
+  const pending = sessionWrites.then(operation, operation)
+  sessionWrites = pending.catch(() => undefined)
+  return pending
+}
 
 const regularSecureStoreOptions: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -26,12 +33,15 @@ const biometricSecureStoreOptions: SecureStore.SecureStoreOptions = {
 }
 
 function canUseSecureStore() {
-  return (
-    Platform.OS !== 'web' &&
+  if (Platform.OS === 'web') return false
+  const available =
     typeof SecureStore.getItemAsync === 'function' &&
     typeof SecureStore.setItemAsync === 'function' &&
     typeof SecureStore.deleteItemAsync === 'function'
-  )
+  if (!available) {
+    throw new Error('Armazenamento seguro indisponível. Reinicie o aplicativo e tente novamente.')
+  }
+  return true
 }
 
 async function setSecureValue(
@@ -118,7 +128,11 @@ async function persistDeviceCredential(deviceCredential: string) {
   ])
 }
 
-export async function persistSession(session: LoginResponse) {
+export function persistSession(session: LoginResponse) {
+  return serializeSessionWrite(() => saveSession(session))
+}
+
+async function saveSession(session: LoginResponse) {
   if (typeof session.deviceCredential === 'string') {
     await persistDeviceCredential(session.deviceCredential)
   } else if (session.deviceCredential === null) {
@@ -134,7 +148,11 @@ export async function persistSession(session: LoginResponse) {
   ])
 }
 
-export async function persistUserProfile(accessToken: string, user: AuthUser) {
+export function persistUserProfile(accessToken: string, user: AuthUser) {
+  return serializeSessionWrite(() => saveUserProfile(accessToken, user))
+}
+
+async function saveUserProfile(accessToken: string, user: AuthUser) {
   await Promise.all([
     persistAccessToken(accessToken),
     AsyncStorage.setItem(USER_KEY, JSON.stringify(user)),
@@ -271,7 +289,12 @@ export async function setBiometricLoginEnabled(enabled: boolean) {
   ])
 }
 
-export async function clearPersistedSession() {
+export function clearPersistedSession() {
+  activeDeviceCredential = null
+  return serializeSessionWrite(removePersistedSession)
+}
+
+async function removePersistedSession() {
   activeDeviceCredential = null
   await Promise.all([
     clearAccessToken(),

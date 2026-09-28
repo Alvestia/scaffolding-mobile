@@ -1,3 +1,4 @@
+import { canUseOfflineFallback } from '@/utils/offline-fallback'
 import { useQuery } from '@tanstack/react-query'
 import { useConnectivityStore } from '@/store/connectivity-store'
 import { fetchAreas, getCachedAreas } from '@/services/areas.service'
@@ -22,7 +23,6 @@ export function useAreas(filters: Filters) {
       isConnected,
     ],
     enabled: Boolean(filters.unitId && filters.contractId),
-    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       if (!filters.unitId || !filters.contractId) {
         return []
@@ -35,6 +35,7 @@ export function useAreas(filters: Filters) {
       try {
         return await fetchAreas(filters)
       } catch (error) {
+        if (!canUseOfflineFallback(error)) throw error
         const cached = await getCachedAreas(filters)
         if (cached.length > 0) {
           return cached

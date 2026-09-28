@@ -15,13 +15,22 @@ export async function getDatabase() {
     databasePromise = import('expo-sqlite')
       .then((SQLite) => SQLite.openDatabaseAsync('scaffolding-mobile.db'))
       .then(async (db) => {
-        await db.execAsync(`
+        try {
+          await db.execAsync(`
           PRAGMA journal_mode = WAL;
           PRAGMA synchronous = NORMAL;
           PRAGMA busy_timeout = 5000;
         `)
 
-        return db
+          return db
+        } catch (error) {
+          await db.closeAsync().catch(() => undefined)
+          throw error
+        }
+      })
+      .catch((error) => {
+        databasePromise = null
+        throw error
       })
   }
 

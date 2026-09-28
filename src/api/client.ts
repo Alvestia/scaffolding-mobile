@@ -18,15 +18,22 @@ type AuthRequestConfig = InternalAxiosRequestConfig & {
 }
 
 let sessionRenewalPromise: Promise<LoginResponse | null> | null = null
+let sessionRenewalGeneration: number | null = null
 
 function renewDeviceSessionOnce() {
-  if (!sessionRenewalPromise) {
-    sessionRenewalPromise = useAuthStore
+  const generation = captureOfflineOwnerContext().generation
+  if (!sessionRenewalPromise || sessionRenewalGeneration !== generation) {
+    sessionRenewalGeneration = generation
+    const pending = useAuthStore
       .getState()
       .renewDeviceSession()
       .finally(() => {
-        sessionRenewalPromise = null
+        if (sessionRenewalPromise === pending) {
+          sessionRenewalPromise = null
+          sessionRenewalGeneration = null
+        }
       })
+    sessionRenewalPromise = pending
   }
 
   return sessionRenewalPromise
@@ -52,6 +59,8 @@ export const api = create({
 })
 
 api.interceptors.request.use((config) => {
+  const ownerContext = (config as AuthRequestConfig).offlineOwnerContext
+  if (ownerContext) assertOfflineOwnerContext(ownerContext)
   const { accessToken } = useAuthStore.getState()
   const { unitId, contractId } = useOperationalContextStore.getState()
   const shouldSkipOrgScope = Boolean(
@@ -119,6 +128,7 @@ api.interceptors.response.use(
 
         try {
           const renewedSession = await renewDeviceSessionOnce()
+          if (ownerContext) assertOfflineOwnerContext(ownerContext)
 
           if (renewedSession) {
             requestConfig.headers = requestConfig.headers ?? {}
@@ -129,6 +139,7 @@ api.interceptors.response.use(
           useOperationalContextStore.getState().reset()
           await useAuthStore.getState().clearSession()
         } catch (refreshError) {
+          if (ownerContext) assertOfflineOwnerContext(ownerContext)
           applyResponseMessage(refreshError)
 
           if (isDeviceCredentialRejected(refreshError)) {

@@ -1,3 +1,4 @@
+import { canUseOfflineFallback } from '@/utils/offline-fallback'
 import { useQuery } from '@tanstack/react-query'
 import { useConnectivityStore } from '@/store/connectivity-store'
 import { fetchWorkOrders, getCachedWorkOrders } from '@/services/work-orders.service'
@@ -14,7 +15,6 @@ export function useWorkOrders(filters: Filters) {
   return useQuery({
     queryKey: ['work-orders', filters.contractId, filters.unitId, filters.projectId, isConnected],
     enabled: Boolean(filters.unitId && filters.contractId),
-    placeholderData: (previousData) => previousData,
     queryFn: async () => {
       if (!filters.unitId || !filters.contractId) {
         return []
@@ -27,6 +27,7 @@ export function useWorkOrders(filters: Filters) {
       try {
         return await fetchWorkOrders(filters)
       } catch (error) {
+        if (!canUseOfflineFallback(error)) throw error
         const cached = await getCachedWorkOrders(filters)
         if (cached.length > 0) {
           return cached

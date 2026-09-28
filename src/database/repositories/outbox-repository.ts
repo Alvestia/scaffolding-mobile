@@ -6,10 +6,15 @@ import {
   SyncStatus,
   type OutboxItem,
 } from '@/types/sync'
+import type { CreateExecutionEntryDto, QueuedExecutionEntryPayload } from '@/types/execution'
 import { normalizeQueuedExecutionPayload } from '@/utils/queued-execution'
 import { nowIso } from '@/utils/date'
 import { decryptOfflinePayload, encryptOfflinePayload } from '@/services/offline-crypto.service'
 import { requireOfflineOwner } from '@/security/offline-owner'
+
+export type PendingExecutionAdvance = Pick<CreateExecutionEntryDto, 'inputType' | 'inputValue' | 'expectedBasisVersion'> & {
+  basisSnapshot?: QueuedExecutionEntryPayload['basisSnapshot']
+}
 
 type OutboxRow = {
   local_id: string
@@ -39,6 +44,15 @@ async function decodePayload(payload: unknown) {
   return payload
 }
 
+function assertEditableItem(existing: { remoteId?: string | null; syncStatus: SyncStatus } | null | undefined, requireExisting?: boolean) {
+  if (!existing && requireExisting) {
+    throw new Error('Este rascunho não está mais disponível. Atualize a fila antes de continuar.')
+  }
+  if (existing && (existing.remoteId || existing.syncStatus === SyncStatus.SYNCING || existing.syncStatus === SyncStatus.SYNCED)) {
+    throw new Error('Este registro já foi enviado ou está em envio. Retome as pendências sem editar a execução.')
+  }
+}
+
 export const outboxRepository = {
   async enqueue(
     item: Omit<
@@ -53,6 +67,7 @@ export const outboxRepository = {
       | 'leaseOwner'
       | 'lastErrorCode'
     >,
+    options?: { requireExisting?: boolean },
   ) {
     const owner = requireOfflineOwner()
     const encryptedPayload = await encryptOfflinePayload(item.payload)
@@ -60,10 +75,12 @@ export const outboxRepository = {
     if (Platform.OS === 'web') {
       const timestamp = nowIso()
       const rows = await loadWebRows<OutboxItem>('outbox_items')
+      const existing = rows.find((row) => row.localId === item.localId)
+      assertEditableItem(existing, options?.requireExisting)
       const nextItem: OutboxItem = {
         ...item,
         retryCount: 0,
-        idempotencyKey: item.localId,
+        idempotencyKey: existing?.idempotencyKey ?? item.localId,
         nextAttemptAt: timestamp,
         lockedAt: null,
         leaseUntil: null,
@@ -71,7 +88,7 @@ export const outboxRepository = {
         lastErrorCode: null,
         errorMessage: item.errorMessage ?? null,
         payload: encryptedPayload,
-        createdAt: timestamp,
+        createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
       }
 
@@ -84,8 +101,13 @@ export const outboxRepository = {
 
     const timestamp = nowIso()
 
-    await withNativeDatabaseLock((db) =>
-      db.runAsync(
+    await withNativeDatabaseLock(async (db) => {
+      const existing = await db.getFirstAsync<OutboxRow>(
+        'SELECT * FROM outbox_items WHERE owner_tenant_id = ? AND owner_user_id = ? AND local_id = ?',
+        [owner.tenantId, owner.userId, item.localId],
+      )
+      assertEditableItem(existing && { remoteId: existing.remote_id, syncStatus: existing.sync_status }, options?.requireExisting)
+      await db.runAsync(
         `INSERT OR REPLACE INTO outbox_items (
           owner_tenant_id,
           owner_user_id,
@@ -117,7 +139,7 @@ export const outboxRepository = {
           item.unitId ?? null,
           item.syncStatus,
           0,
-          item.localId,
+          existing?.idempotency_key ?? item.localId,
           timestamp,
           null,
           null,
@@ -125,11 +147,11 @@ export const outboxRepository = {
           null,
           item.errorMessage ?? null,
           encryptedPayload,
-          timestamp,
+          existing?.created_at ?? timestamp,
           timestamp,
         ],
-      ),
-    )
+      )
+    })
   },
 
   async listAll() {
@@ -495,15 +517,21 @@ export const outboxRepository = {
   async listPendingExecutionsByServiceId(scope: {
     contractId: string
     unitId: string
-  }): Promise<Map<string, { inputType: string; inputValue: number }[]>> {
+  }): Promise<Map<string, PendingExecutionAdvance[]>> {
     const items = await this.listAll()
-    const map = new Map<string, { inputType: string; inputValue: number }[]>()
+    const map = new Map<string, PendingExecutionAdvance[]>()
 
     for (const item of items) {
       if (item.entityType !== OutboxEntityType.EXECUTION_ENTRY) {
         continue
       }
       if (item.contractId !== scope.contractId || item.unitId !== scope.unitId) {
+        continue
+      }
+      // Accepted entries are already in remote totals. Rejected/conflicting
+      // drafts remain in Pendências, but cannot count as current execution.
+      if (item.remoteId || item.syncStatus === SyncStatus.SYNCED ||
+          item.syncStatus === SyncStatus.CONFLICT || item.syncStatus === SyncStatus.DEAD_LETTER) {
         continue
       }
       const payload = normalizeQueuedExecutionPayload(item.payload)
@@ -515,6 +543,8 @@ export const outboxRepository = {
       existing.push({
         inputType: payload.entry.inputType,
         inputValue: payload.entry.inputValue,
+        expectedBasisVersion: payload.entry.expectedBasisVersion,
+        basisSnapshot: payload.basisSnapshot,
       })
       map.set(serviceId, existing)
     }

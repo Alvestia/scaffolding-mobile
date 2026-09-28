@@ -49,7 +49,7 @@ function countFailures(items: OutboxItem[]) {
   return items.filter((item) => failureStatuses.includes(item.syncStatus)).length
 }
 
-export const useSyncStore = create<SyncStore>((set) => ({
+export const useSyncStore = create<SyncStore>((set, get) => ({
   isSyncing: false,
   lastSyncAt: null,
   outboxItems: [],
@@ -79,6 +79,7 @@ export const useSyncStore = create<SyncStore>((set) => ({
     })
   },
   runSyncNow: async (scope) => {
+    if (get().isSyncing) return
     try {
       set({ isSyncing: true, lastError: null })
       await runFullSync(scope ?? undefined)
@@ -102,6 +103,9 @@ export const useSyncStore = create<SyncStore>((set) => ({
     }
   },
   runManualSyncNow: async (scope, onProgress) => {
+    if (get().isSyncing) {
+      throw new Error('Aguarde a sincronização em andamento antes de atualizar a base.')
+    }
     try {
       set({ isSyncing: true, lastError: null })
       await runManualSync(scope, onProgress)

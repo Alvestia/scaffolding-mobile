@@ -1,3 +1,4 @@
+import { canUseOfflineFallback } from '@/utils/offline-fallback'
 import { useQuery } from '@tanstack/react-query'
 import {
   fetchScaffoldComponentTypes,
@@ -16,6 +17,7 @@ export function useScaffoldComponentTypes() {
       try {
         return await fetchScaffoldComponentTypes()
       } catch (error) {
+        if (!canUseOfflineFallback(error)) throw error
         const cached = await getCachedScaffoldComponentTypes()
         if (cached.length > 0) return cached
         throw error
