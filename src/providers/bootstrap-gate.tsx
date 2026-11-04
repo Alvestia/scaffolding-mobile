@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { colors, spacing } from '@/constants/theme'
 
 export function BootstrapGate({ children }: PropsWithChildren) {
-  const { isReady, error, retry } = useAppBootstrap()
+  const { isReady, error, canResetSession, retry, resetSession } = useAppBootstrap()
 
   if (error) {
     return (
@@ -22,6 +22,11 @@ export function BootstrapGate({ children }: PropsWithChildren) {
       >
         <Banner tone="danger" title="Não foi possível iniciar" description={error} />
         <Button onPress={retry}>Tentar novamente</Button>
+        {canResetSession ? (
+          <Button variant="secondary" onPress={() => void resetSession()}>
+            Entrar novamente com e-mail e senha
+          </Button>
+        ) : null}
       </View>
     )
   }

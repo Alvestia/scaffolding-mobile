@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as SecureStore from 'expo-secure-store'
 import { Platform } from 'react-native'
+import { SHIFT_SESSION_TTL_HOURS } from '@/constants/app'
 import type { AuthUser, LoginResponse } from '@/types/auth'
 
 const ACCESS_TOKEN_KEY = 'scaffold_mobile_access_token'
@@ -10,8 +11,15 @@ const DEVICE_CREDENTIAL_KEY = 'scaffold_mobile_device_credential_v1'
 const BIOMETRIC_DEVICE_CREDENTIAL_KEY = 'scaffold_mobile_biometric_device_credential_v1'
 const DEVICE_CREDENTIAL_STORAGE_MODE_KEY = 'scaffold_mobile_device_credential_mode_v1'
 const BIOMETRIC_LOGIN_KEY = 'scaffold_mobile_biometric_login_enabled'
+// Preferência do aparelho: sobrevive ao logout para manter a escolha na próxima entrada.
+const KEEP_SIGNED_IN_KEY = 'scaffold_mobile_keep_signed_in_v1'
+const SESSION_EXPIRES_AT_KEY = 'scaffold_mobile_session_expires_at_v1'
 
 type DeviceCredentialStorageMode = 'regular' | 'biometric'
+
+export type SessionPersistence = {
+  keepSignedIn: boolean
+}
 
 let activeDeviceCredential: string | null = null
 let sessionWrites: Promise<unknown> = Promise.resolve()
@@ -128,11 +136,28 @@ async function persistDeviceCredential(deviceCredential: string) {
   ])
 }
 
-export function persistSession(session: LoginResponse) {
-  return serializeSessionWrite(() => saveSession(session))
+async function saveSessionPersistence({ keepSignedIn }: SessionPersistence) {
+  await Promise.all([
+    AsyncStorage.setItem(KEEP_SIGNED_IN_KEY, String(keepSignedIn)),
+    keepSignedIn
+      ? AsyncStorage.removeItem(SESSION_EXPIRES_AT_KEY)
+      : AsyncStorage.setItem(
+          SESSION_EXPIRES_AT_KEY,
+          new Date(Date.now() + SHIFT_SESSION_TTL_HOURS * 60 * 60 * 1000).toISOString(),
+        ),
+  ])
 }
 
-async function saveSession(session: LoginResponse) {
+export function persistSession(session: LoginResponse, persistence?: SessionPersistence) {
+  return serializeSessionWrite(() => saveSession(session, persistence))
+}
+
+async function saveSession(session: LoginResponse, persistence?: SessionPersistence) {
+  // O prazo é gravado antes da credencial: uma falha no meio nunca deixa a sessão sem validade.
+  if (persistence) {
+    await saveSessionPersistence(persistence)
+  }
+
   if (typeof session.deviceCredential === 'string') {
     await persistDeviceCredential(session.deviceCredential)
   } else if (session.deviceCredential === null) {
@@ -240,6 +265,22 @@ export async function hasBiometricDeviceCredential() {
   return (await getDeviceCredentialStorageMode()) === 'biometric'
 }
 
+export async function loadKeepSignedInPreference() {
+  return (await AsyncStorage.getItem(KEEP_SIGNED_IN_KEY)) !== 'false'
+}
+
+export async function isPersistedSessionExpired() {
+  const expiresAt = await AsyncStorage.getItem(SESSION_EXPIRES_AT_KEY)
+
+  if (!expiresAt) {
+    return false
+  }
+
+  const expiresAtMs = Date.parse(expiresAt)
+  // Prazo ilegível encerra a sessão em vez de mantê-la indefinidamente.
+  return Number.isNaN(expiresAtMs) || Date.now() >= expiresAtMs
+}
+
 export async function isBiometricLoginEnabled() {
   if (Platform.OS === 'web') {
     return false
@@ -300,6 +341,7 @@ async function removePersistedSession() {
     clearAccessToken(),
     AsyncStorage.removeItem(USER_KEY),
     AsyncStorage.removeItem(SESSION_MODE_KEY),
+    AsyncStorage.removeItem(SESSION_EXPIRES_AT_KEY),
     AsyncStorage.removeItem(BIOMETRIC_LOGIN_KEY),
     AsyncStorage.removeItem(DEVICE_CREDENTIAL_STORAGE_MODE_KEY),
     deleteSecureValue(DEVICE_CREDENTIAL_KEY),

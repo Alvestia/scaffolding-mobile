@@ -140,6 +140,7 @@ test('database or session bootstrap failure has a retry path without erasing dat
     const failed = harness.render(useAppBootstrap)
     assert.equal(failed.isReady, false)
     assert.match(failed.error, /preservados/)
+    assert.equal(failed.canResetSession, stage === 'session')
     if (stage === 'database') assert.equal(hydrated, 0)
     failing = false
     failed.retry()
@@ -420,4 +421,173 @@ test('HTTP refresh completion after an account switch cannot replay a request or
     assert.equal(setup.counts().requests, 1)
     assert.equal(setup.counts().clears, 0)
   }
+})
+
+test('a saved session that cannot be read can be discarded to reach the login screen', async () => {
+  const harness = hookHarness()
+  let failing = true,
+    cleared = 0
+  const state = {
+    isHydrated: false,
+    hydrate: async () => {
+      if (failing) throw new Error('SecureStore decrypt failed')
+      state.isHydrated = true
+    },
+    clearSession: async () => {
+      cleared++
+      failing = false
+    },
+  }
+  const { useAppBootstrap } = loadSource('hooks/use-app-bootstrap.ts', {
+    react: harness.hooks,
+    '@/database/migrations': { initializeDatabase: async () => {} },
+    '@/store/auth-store': { useAuthStore: (selector) => selector(state) },
+  })
+  harness.render(useAppBootstrap)
+  await flush()
+  await harness.render(useAppBootstrap).resetSession()
+  harness.render(useAppBootstrap)
+  await flush()
+  assert.equal(harness.render(useAppBootstrap).isReady, true)
+  assert.equal(cleared, 1)
+})
+
+test('only HTTP 401 from refresh revokes the device session; proxy 403 and outages keep it', () => {
+  const { AxiosError } = require('axios')
+  const { isDeviceCredentialRejected } = loadSource('services/device-session.service.ts', {
+    '@/utils/env': { env: { apiUrl: 'https://api.example.com', requestTimeoutMs: 30000 } },
+    '@/services/device-identity.service': {},
+  })
+  const failure = (status) =>
+    new AxiosError('failure', undefined, undefined, undefined, { status, data: {} })
+  assert.equal(isDeviceCredentialRejected(failure(401)), true)
+  for (const status of [403, 429, 502, 503]) {
+    assert.equal(isDeviceCredentialRejected(failure(status)), false, String(status))
+  }
+  assert.equal(isDeviceCredentialRejected(new AxiosError('offline')), false)
+})
+
+test('a session not kept on the device ends after one shift; a kept session does not', async () => {
+  const realNow = Date.now
+  let now = Date.parse('2026-10-29T19:00:00Z')
+  Date.now = () => now
+  try {
+    const values = new Map(),
+      writes = []
+    const write = async (key, value) => {
+      writes.push(key)
+      values.set(key, value)
+    }
+    const remove = async (key) => {
+      values.delete(key)
+    }
+    const session = loadSource('services/session-storage.ts', {
+      'react-native': { Platform: { OS: 'android' } },
+      'expo-secure-store': {
+        getItemAsync: async (key) => values.get(key) ?? null,
+        setItemAsync: write,
+        deleteItemAsync: remove,
+      },
+      '@react-native-async-storage/async-storage': {
+        getItem: async (key) => values.get(key) ?? null,
+        setItem: write,
+        removeItem: remove,
+      },
+    })
+    const login = {
+      accessToken: 'test-token',
+      user: { id: 'user' },
+      deviceCredential: 'test-device',
+    }
+    const hours = (value) => value * 60 * 60 * 1000
+
+    assert.equal(await session.loadKeepSignedInPreference(), true)
+    await session.persistSession(login, { keepSignedIn: false })
+    const expiryWrite = writes.findIndex((key) => key.includes('expires_at'))
+    assert.ok(
+      expiryWrite >= 0 && expiryWrite < writes.findIndex((key) => /token|credential_v1/.test(key)),
+    )
+    now += hours(11)
+    assert.equal(await session.isPersistedSessionExpired(), false)
+    // A renovação do access token não estende o turno.
+    await session.persistSession({ accessToken: 'renewed', user: { id: 'user' } })
+    now += hours(1)
+    assert.equal(await session.isPersistedSessionExpired(), true)
+
+    await session.clearPersistedSession()
+    assert.equal(await session.isPersistedSessionExpired(), false)
+    assert.equal(await session.loadKeepSignedInPreference(), false)
+
+    await session.persistSession(login, { keepSignedIn: true })
+    now += hours(24 * 179)
+    assert.equal(await session.isPersistedSessionExpired(), false)
+    assert.equal((await session.loadPersistedSession()).accessToken, 'test-token')
+
+    values.set('scaffold_mobile_session_expires_at_v1', 'unreadable')
+    assert.equal(await session.isPersistedSessionExpired(), true)
+  } finally {
+    Date.now = realNow
+  }
+})
+
+function expirySetup({ expired, persisted = null }) {
+  const identity = loadSource('security/offline-owner.ts'),
+    revoked = [],
+    state = { expired, cleared: 0 }
+  const context = { activateOwner: () => {}, clearOwner: () => {} }
+  const { useAuthStore } = loadSource('store/auth-store.ts', {
+    '@/security/offline-owner': identity,
+    '@/services/biometric-auth.service': {},
+    '@/services/session-storage': {
+      isPersistedSessionExpired: async () => state.expired,
+      getActiveDeviceCredential: () => null,
+      loadRegularDeviceCredential: async () => 'test-device',
+      clearPersistedSession: async () => {
+        state.cleared++
+        state.expired = false
+        persisted = null
+      },
+      isBiometricLoginEnabled: async () => false,
+      loadPersistedSession: async () => persisted,
+    },
+    '@/services/device-session.service': {
+      revokeDeviceSession: async (credential) => revoked.push(credential),
+    },
+    '@/store/operational-context-store': {
+      useOperationalContextStore: {
+        persist: { rehydrate: async () => {} },
+        getState: () => context,
+      },
+    },
+  })
+  return { store: useAuthStore, identity, revoked, state }
+}
+
+test('startup revokes and clears an expired shift session and tells the login screen why', async () => {
+  const user = { id: 'user', tenantId: 'tenant' }
+  const setup = expirySetup({ expired: true, persisted: { accessToken: 'old', user } })
+  await setup.store.getState().hydrate()
+  assert.deepEqual(setup.revoked, ['test-device'])
+  assert.equal(setup.state.cleared, 1)
+  assert.equal(setup.identity.getOfflineOwner(), null)
+  const auth = setup.store.getState()
+  assert.equal(auth.user, null)
+  assert.equal(auth.sessionExpired, true)
+  assert.equal(auth.isHydrated, true)
+
+  setup.state.expired = true
+  assert.equal(await setup.store.getState().unlockWithBiometrics(), null)
+  assert.equal(setup.state.cleared, 2)
+})
+
+test('startup restores a kept session without asking for the password', async () => {
+  const user = { id: 'user', tenantId: 'tenant' }
+  const setup = expirySetup({ expired: false, persisted: { accessToken: 'kept', user } })
+  await setup.store.getState().hydrate()
+  assert.equal(setup.revoked.length, 0)
+  assert.equal(setup.state.cleared, 0)
+  const auth = setup.store.getState()
+  assert.equal(auth.accessToken, 'kept')
+  assert.equal(auth.sessionExpired, false)
+  assert.deepEqual(setup.identity.getOfflineOwner(), { tenantId: 'tenant', userId: 'user' })
 })

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Link, useLocalSearchParams, useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NetworkStatusIndicator } from '@/components/app/network-status-indicator'
@@ -136,19 +136,18 @@ export default function QueueDetailPage() {
                   </View>
                 </View>
 
-                <Link href={`/(app)/queue/${service.id}/execute`} asChild>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.heroActionButton,
-                      pressed ? styles.heroActionButtonPressed : null,
-                    ]}
-                  >
-                    <Ionicons name="flash-outline" size={15} color={colors.white} />
-                    <Text style={styles.heroActionButtonLabel}>
-                      {getExecutionActionLabel(service.status)}
-                    </Text>
-                  </Pressable>
-                </Link>
+                <Pressable
+                  onPress={() => router.push(`/(app)/queue/${service.id}/execute` as never)}
+                  style={({ pressed }) => [
+                    styles.heroActionButton,
+                    pressed ? styles.heroActionButtonPressed : null,
+                  ]}
+                >
+                  <Ionicons name="flash-outline" size={15} color={colors.white} />
+                  <Text style={styles.heroActionButtonLabel}>
+                    {getExecutionActionLabel(service.status)}
+                  </Text>
+                </Pressable>
               </View>
 
               <View style={styles.sectionCard}>
@@ -219,18 +218,17 @@ export default function QueueDetailPage() {
                 />
               ) : null}
 
-              <Link href={`/(app)/queue/${service.id}/execute`} asChild>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.primaryButton,
-                    pressed ? styles.primaryButtonPressed : null,
-                  ]}
-                >
-                  <Text style={styles.primaryButtonLabel}>
-                    {getExecutionActionLabel(service.status)}
-                  </Text>
-                </Pressable>
-              </Link>
+              <Pressable
+                onPress={() => router.push(`/(app)/queue/${service.id}/execute` as never)}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed ? styles.primaryButtonPressed : null,
+                ]}
+              >
+                <Text style={styles.primaryButtonLabel}>
+                  {getExecutionActionLabel(service.status)}
+                </Text>
+              </Pressable>
             </>
           )}
         </View>

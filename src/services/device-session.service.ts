@@ -51,6 +51,8 @@ export async function revokeDeviceSession(deviceCredential: string) {
   }
 }
 
+// A API responde 401 quando a credencial expirou ou foi revogada. Um 403 vem de proxy ou
+// firewall da rede local e não pode apagar a sessão do aparelho.
 export function isDeviceCredentialRejected(error: unknown) {
-  return isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 403)
+  return isAxiosError(error) && error.response?.status === 401
 }

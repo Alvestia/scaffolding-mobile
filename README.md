@@ -34,6 +34,13 @@ O app não possui fluxo local de primeiro acesso/troca de senha nem cadastro de 
 
 O login `MOBILE` cria uma sessão de dispositivo. O access token é curto e, junto com a credencial revogável, é guardado no SecureStore para retomada da sessão offline. No Android/iOS, a indisponibilidade do SecureStore bloqueia a operação; não há fallback para armazenamento comum. No aplicativo nativo, essa é a proteção equivalente apropriada — `HttpOnly` se aplica ao cookie usado pela aplicação web.
 
+Na tela de login, **Manter conectado neste aparelho** vem marcado e o aparelho lembra a última escolha:
+
+- marcado: o app reabre conectado, sem senha, até o usuário sair, a credencial ser revogada ou expirar no servidor (`AUTH_DEVICE_SESSION_TTL_DAYS`, padrão 180 dias, sem renovação automática);
+- desmarcado (aparelho compartilhado): a sessão termina 12 horas após o login (`SHIFT_SESSION_TTL_HOURS`). O prazo é verificado ao abrir o app e quando ele volta ao primeiro plano, nunca no meio de um registro. Ao vencer, a credencial é revogada na API quando possível.
+
+Só um HTTP 401 em `/auth/refresh` apaga a credencial do aparelho. Um 403 de proxy ou firewall, timeouts e erros 5xx mantêm a sessão. Se a sessão salva não puder ser lida na inicialização, a tela de erro permite descartá-la e entrar com e-mail e senha, preservando os registros locais.
+
 Rotas consumidas:
 
 - `POST /auth/login`;

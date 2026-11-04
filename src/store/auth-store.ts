@@ -10,6 +10,7 @@ import {
   hasBiometricDeviceCredential,
   hasPersistedSession,
   isBiometricLoginEnabled,
+  isPersistedSessionExpired,
   loadBiometricDeviceCredential,
   loadPersistedSession,
   loadPersistedUser,
@@ -17,8 +18,9 @@ import {
   persistSession,
   persistUserProfile,
   setBiometricLoginEnabled as setBiometricLoginPreference,
+  type SessionPersistence,
 } from '@/services/session-storage'
-import { refreshDeviceSession } from '@/services/device-session.service'
+import { refreshDeviceSession, revokeDeviceSession } from '@/services/device-session.service'
 import { assertOfflineOwnerContext, captureOfflineOwnerContext, setOfflineOwner } from '@/security/offline-owner'
 import { useOperationalContextStore } from '@/store/operational-context-store'
 
@@ -40,13 +42,15 @@ type AuthState = {
   lockedUser: AuthUser | null
   hasLockedSession: boolean
   biometricLabel: string | null
+  sessionExpired: boolean
   isHydrated: boolean
   hydrate: () => Promise<void>
-  setSession: (session: LoginResponse) => Promise<void>
+  setSession: (session: LoginResponse, persistence?: SessionPersistence) => Promise<void>
   setUserProfile: (user: AuthUser) => Promise<void>
   setBiometricLoginEnabled: (enabled: boolean) => Promise<void>
   unlockWithBiometrics: () => Promise<LoginResponse | null>
   renewDeviceSession: () => Promise<LoginResponse | null>
+  enforceSessionExpiry: () => Promise<boolean>
   clearSession: () => Promise<void>
 }
 
@@ -56,8 +60,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   lockedUser: null,
   hasLockedSession: false,
   biometricLabel: null,
+  sessionExpired: false,
   isHydrated: false,
   hydrate: async () => {
+    await useAuthStore.getState().enforceSessionExpiry()
+
     const biometricEnabled = await isBiometricLoginEnabled()
 
     if (biometricEnabled && (await hasPersistedSession())) {
@@ -110,11 +117,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       isHydrated: true,
     })
   },
-  setSession: async (session) => {
+  setSession: async (session, persistence) => {
     const { accessToken, user } = session
     await activateOfflineOwner(user)
-    await persistSession(session)
-    set({ accessToken, user, lockedUser: null, hasLockedSession: false })
+    await persistSession(session, persistence)
+    set({ accessToken, user, lockedUser: null, hasLockedSession: false, sessionExpired: false })
   },
   setUserProfile: async (user) => {
     const accessToken = useAuthStore.getState().accessToken
@@ -141,6 +148,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     })
   },
   unlockWithBiometrics: async () => {
+    if (await useAuthStore.getState().enforceSessionExpiry()) {
+      return null
+    }
+
     if (!(await isBiometricLoginEnabled())) {
       return null
     }
@@ -209,6 +220,22 @@ export const useAuthStore = create<AuthState>((set) => ({
     })
     return session
   },
+  enforceSessionExpiry: async () => {
+    if (!(await isPersistedSessionExpired())) {
+      return false
+    }
+
+    // Com biometria, ler a credencial exigiria o sensor: nesse caso ela só é apagada do aparelho.
+    const deviceCredential =
+      getActiveDeviceCredential() ?? (await loadRegularDeviceCredential().catch(() => null))
+    if (deviceCredential) {
+      void revokeDeviceSession(deviceCredential).catch(() => undefined)
+    }
+
+    await useAuthStore.getState().clearSession()
+    set({ sessionExpired: true })
+    return true
+  },
   clearSession: async () => {
     setOfflineOwner(null)
     set({
@@ -217,6 +244,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       lockedUser: null,
       hasLockedSession: false,
       biometricLabel: null,
+      sessionExpired: false,
     })
     await deactivateOfflineOwner()
     await clearPersistedSession()

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { router } from 'expo-router'
@@ -17,12 +17,14 @@ import {
   View,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { SHIFT_SESSION_TTL_HOURS } from '@/constants/app'
 import { colors, spacing } from '@/constants/theme'
 import { kaeferWordmark } from '@/constants/brand-assets'
 import { login, upgradeLegacyDeviceSession } from '@/services/auth.service'
 import { refreshAuthenticatedSessionAccess } from '@/services/auth-session.service'
 import { getBiometricCapability } from '@/services/biometric-auth.service'
 import { prefetchOfflineCatalogs } from '@/services/catalog-preload.service'
+import { loadKeepSignedInPreference } from '@/services/session-storage'
 import { queryClient } from '@/providers/app-providers'
 import { useAuthStore } from '@/store/auth-store'
 import { useOperationalContextStore } from '@/store/operational-context-store'
@@ -41,12 +43,30 @@ export default function LoginPage() {
   const hasLockedSession = useAuthStore((state) => state.hasLockedSession)
   const lockedUser = useAuthStore((state) => state.lockedUser)
   const biometricLabel = useAuthStore((state) => state.biometricLabel)
+  const sessionExpired = useAuthStore((state) => state.sessionExpired)
   const isConnected = useConnectivityStore((state) => state.isConnected)
   const resetContext = useOperationalContextStore((state) => state.reset)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isBiometricSubmitting, setIsBiometricSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [keepSignedIn, setKeepSignedIn] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    void loadKeepSignedInPreference()
+      .then((preference) => {
+        if (!cancelled) setKeepSignedIn(preference)
+      })
+      .catch(() => {
+        // Sem a preferência salva, a caixa continua marcada.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const appVersion = useMemo(
     () =>
       Constants.expoConfig?.version ?? Constants.manifest2?.extra?.expoClient?.version ?? '1.0.0',
@@ -106,7 +126,7 @@ export default function LoginPage() {
       queryClient.clear()
       const response = await login(values)
       await clearSession()
-      await setSession(response)
+      await setSession(response, { keepSignedIn })
 
       try {
         const currentUser = await refreshAuthenticatedSessionAccess(response.user)
@@ -188,6 +208,11 @@ export default function LoginPage() {
                   <Text style={styles.formSubtitle}>
                     Entre com as mesmas credenciais da plataforma Scaffold.
                   </Text>
+                  {sessionExpired ? (
+                    <Text style={styles.sessionNotice}>
+                      Sua sessão de {SHIFT_SESSION_TTL_HOURS} horas terminou. Entre novamente.
+                    </Text>
+                  ) : null}
                 </View>
 
                 <View style={styles.form}>
@@ -253,6 +278,29 @@ export default function LoginPage() {
                       </View>
                     )}
                   />
+
+                  <Pressable
+                    onPress={() => setKeepSignedIn((current) => !current)}
+                    disabled={isSubmitting || isBiometricSubmitting}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: keepSignedIn }}
+                    hitSlop={6}
+                    style={styles.keepSignedInRow}
+                  >
+                    <Ionicons
+                      name={keepSignedIn ? 'checkbox' : 'square-outline'}
+                      size={22}
+                      color={keepSignedIn ? colors.primary : colors.borderStrong}
+                    />
+                    <View style={styles.keepSignedInTextBlock}>
+                      <Text style={styles.keepSignedInLabel}>Manter conectado neste aparelho</Text>
+                      <Text style={styles.keepSignedInHint}>
+                        {keepSignedIn
+                          ? 'Continua conectado ao reabrir o app. Desmarque em aparelho compartilhado.'
+                          : `A sessão termina em ${SHIFT_SESSION_TTL_HOURS} horas ou ao tocar em Sair.`}
+                      </Text>
+                    </View>
+                  </Pressable>
 
                   {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
 
@@ -379,6 +427,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
+  sessionNotice: {
+    color: colors.warning,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
   form: {
     width: '100%',
     gap: 18,
@@ -430,6 +484,26 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 12,
     paddingLeft: 2,
+  },
+  keepSignedInRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  keepSignedInTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  keepSignedInLabel: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 22,
+  },
+  keepSignedInHint: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
   },
   submitError: {
     color: colors.danger,
