@@ -9,6 +9,7 @@ Aplicativo Expo/React Native para operação de campo do Scaffold, alinhado à A
 ## Funcionalidades
 
 - login e sessão revogável vinculada ao aparelho;
+- acesso de campo, para funcionários sem e-mail corporativo: código de ativação de uso único, celular vinculado e bloqueio de tela obrigatório;
 - reentrada offline com credencial no SecureStore e biometria opcional;
 - escolha de unidade, contrato e equipe operacional;
 - fila de execução com cache local;
@@ -51,6 +52,18 @@ Rotas consumidas:
 - `POST /auth/refresh`;
 - `POST /auth/logout`;
 - `POST /auth/device-session`.
+
+## Acesso de campo (sem e-mail)
+
+Para encarregados sem e-mail corporativo. A conta pertence ao funcionário do cadastro e só entra no aplicativo. Regras e rotas da API: `scaffolding-api/docs/acesso-campo.md`.
+
+- **Ativação.** Na tela de login, "Sem e-mail corporativo? Entrar com código de acesso". O funcionário lê o QR Code (`SCAFFOLD-CAMPO:<código>`) ou digita o código (`XXXX-XXXX`) que o responsável gerou na web. O código vale uma vez e o app chama `POST /auth/field/activate`.
+- **Bloqueio de tela obrigatório.** A conta não tem senha. Por isso:
+  - um celular sem PIN, padrão, senha ou biometria não ativa a conta, e o app checa isso antes de gastar o código;
+  - o app pede esse bloqueio a cada abertura e depois de 5 minutos fora dele;
+  - o bloqueio fica por cima da navegação, então ao desbloquear o funcionário volta à mesma tela.
+- **Sessão.** A sessão é sempre a do aparelho, com "Manter conectado". O servidor renova a validade a cada uso.
+- **Fim do acesso.** Quando o funcionário é inativado ou o acesso é revogado, a próxima renovação recebe 401 e o app sai da conta. A tela de login mostra o motivo e quantos registros ficaram sem enviar, porque esses registros não são aceitos. Ao tocar em Sair, o app avisa que só volta com um novo código.
 
 ## Offline e sincronização
 

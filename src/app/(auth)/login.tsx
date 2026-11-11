@@ -44,6 +44,7 @@ export default function LoginPage() {
   const lockedUser = useAuthStore((state) => state.lockedUser)
   const biometricLabel = useAuthStore((state) => state.biometricLabel)
   const sessionExpired = useAuthStore((state) => state.sessionExpired)
+  const accessEndedNotice = useAuthStore((state) => state.accessEndedNotice)
   const isConnected = useConnectivityStore((state) => state.isConnected)
   const resetContext = useOperationalContextStore((state) => state.reset)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -213,6 +214,9 @@ export default function LoginPage() {
                       Sua sessão de {SHIFT_SESSION_TTL_HOURS} horas terminou. Entre novamente.
                     </Text>
                   ) : null}
+                  {accessEndedNotice ? (
+                    <Text style={styles.sessionNotice}>{accessEndedNotice}</Text>
+                  ) : null}
                 </View>
 
                 <View style={styles.form}>
@@ -352,6 +356,18 @@ export default function LoginPage() {
                       </View>
                     </Pressable>
                   ) : null}
+
+                  <Pressable
+                    onPress={() => router.push('/(auth)/field-code' as never)}
+                    disabled={isSubmitting || isBiometricSubmitting}
+                    style={styles.fieldCodeLink}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="qr-code-outline" size={16} color={colors.primaryStrong} />
+                    <Text style={styles.fieldCodeLabel}>
+                      Sem e-mail corporativo? Entrar com código de acesso
+                    </Text>
+                  </Pressable>
                 </View>
               </View>
             </View>
@@ -368,6 +384,19 @@ export default function LoginPage() {
 }
 
 const styles = StyleSheet.create({
+  fieldCodeLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  fieldCodeLabel: {
+    color: colors.primaryStrong,
+    fontSize: 13,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
   safeArea: {
     flex: 1,
     backgroundColor: colors.primaryStrong,

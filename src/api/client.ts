@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/auth-store'
 import { useConnectivityStore } from '@/store/connectivity-store'
 import { useOperationalContextStore } from '@/store/operational-context-store'
 import { isDeviceCredentialRejected } from '@/services/device-session.service'
+import { fieldAccessEndedNotice } from '@/security/access-ended-notice'
 import type { LoginResponse } from '@/types/auth'
 import {
   assertOfflineOwnerContext,
@@ -37,6 +38,15 @@ function renewDeviceSessionOnce() {
   }
 
   return sessionRenewalPromise
+}
+
+/** The server refused this phone: sign out, and tell a field account why. */
+async function endRejectedSession() {
+  const auth = useAuthStore.getState()
+  const notice = auth.user?.accountType === 'FIELD' ? fieldAccessEndedNotice() : null
+  useOperationalContextStore.getState().reset()
+  await auth.clearSession()
+  if (notice) useAuthStore.getState().noteAccessEnded?.(notice)
 }
 
 function applyResponseMessage(error: unknown) {
@@ -136,15 +146,13 @@ api.interceptors.response.use(
             return api.request(requestConfig)
           }
 
-          useOperationalContextStore.getState().reset()
-          await useAuthStore.getState().clearSession()
+          await endRejectedSession()
         } catch (refreshError) {
           if (ownerContext) assertOfflineOwnerContext(ownerContext)
           applyResponseMessage(refreshError)
 
           if (isDeviceCredentialRejected(refreshError)) {
-            useOperationalContextStore.getState().reset()
-            await useAuthStore.getState().clearSession()
+            await endRejectedSession()
           } else if (isAxiosError(refreshError) && !refreshError.response) {
             useConnectivityStore.getState().setApiReachable(false)
           }

@@ -43,6 +43,8 @@ type AuthState = {
   hasLockedSession: boolean
   biometricLabel: string | null
   sessionExpired: boolean
+  /** Why a field account was signed out by the server (shown on the login screen). */
+  accessEndedNotice: string | null
   isHydrated: boolean
   hydrate: () => Promise<void>
   setSession: (session: LoginResponse, persistence?: SessionPersistence) => Promise<void>
@@ -52,6 +54,7 @@ type AuthState = {
   renewDeviceSession: () => Promise<LoginResponse | null>
   enforceSessionExpiry: () => Promise<boolean>
   clearSession: () => Promise<void>
+  noteAccessEnded: (notice: string | null) => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -61,6 +64,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   hasLockedSession: false,
   biometricLabel: null,
   sessionExpired: false,
+  accessEndedNotice: null,
   isHydrated: false,
   hydrate: async () => {
     await useAuthStore.getState().enforceSessionExpiry()
@@ -121,7 +125,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { accessToken, user } = session
     await activateOfflineOwner(user)
     await persistSession(session, persistence)
-    set({ accessToken, user, lockedUser: null, hasLockedSession: false, sessionExpired: false })
+    set({
+      accessToken,
+      user,
+      lockedUser: null,
+      hasLockedSession: false,
+      sessionExpired: false,
+      accessEndedNotice: null,
+    })
   },
   setUserProfile: async (user) => {
     const accessToken = useAuthStore.getState().accessToken
@@ -249,4 +260,5 @@ export const useAuthStore = create<AuthState>((set) => ({
     await deactivateOfflineOwner()
     await clearPersistedSession()
   },
+  noteAccessEnded: (notice) => set({ accessEndedNotice: notice }),
 }))

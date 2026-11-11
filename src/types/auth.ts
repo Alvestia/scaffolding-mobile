@@ -42,6 +42,8 @@ export type AuthUser = {
   name: string
   email: string
   tenantId: string
+  /** CORPORATE (MyKaefer) or FIELD (app-only access activated with a code, no e-mail). */
+  accountType?: string
   roles: AuthRole[]
   permissions: string[]
   accessScope: AuthAccessScope

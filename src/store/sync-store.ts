@@ -15,6 +15,7 @@ import { getErrorMessage } from '@/utils/error'
 import { normalizeQueuedExecutionPayload } from '@/utils/queued-execution'
 
 import { removeInspectionEvidenceFiles } from '@/services/inspections.service'
+import { setUnsentRecordsCounter } from '@/security/access-ended-notice'
 import type { InspectionSubmissionPayload } from '@/types/inspection'
 
 type SyncStore = {
@@ -190,3 +191,9 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
     })
   },
 }))
+
+// Counted when a field account is signed out by the server: those records stay unsent.
+setUnsentRecordsCounter(() => {
+  const state = useSyncStore.getState()
+  return state.pendingCount + state.failedCount
+})

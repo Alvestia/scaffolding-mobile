@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
-import { AppState } from 'react-native'
+import { AppState, StyleSheet, View } from 'react-native'
 import { Redirect, Stack } from 'expo-router'
+import { FieldLockScreen } from '@/components/app/field-lock-screen'
 import { queryClient } from '@/providers/app-providers'
 import { prefetchScopedReferenceData } from '@/services/catalog-preload.service'
+import { useAppLockStore } from '@/store/app-lock-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useConnectivityStore } from '@/store/connectivity-store'
 import { useOperationalContextStore } from '@/store/operational-context-store'
@@ -15,6 +17,17 @@ export default function AppLayout() {
   const contractId = useOperationalContextStore((state) => state.contractId)
   const unitId = useOperationalContextStore((state) => state.unitId)
   const companyId = useOperationalContextStore((state) => state.companyId)
+  const unlocked = useAppLockStore((state) => state.unlocked)
+  const isFieldAccount = user?.accountType === 'FIELD'
+
+  useEffect(() => {
+    // Field accounts have no password: leaving the app for a while asks the phone lock again.
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') useAppLockStore.getState().resume()
+      else useAppLockStore.getState().markBackground()
+    })
+    return () => subscription.remove()
+  }, [])
 
   useEffect(() => {
     // A sessão de turno vence só quando o app volta ao primeiro plano, sem interromper um registro em andamento.
@@ -45,5 +58,21 @@ export default function AppLayout() {
     return <Redirect href="/(auth)/login" />
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />
+  // Over the navigation, not instead of it: unlocking returns to the same screen.
+  return (
+    <View style={styles.root}>
+      <Stack screenOptions={{ headerShown: false }} />
+      {isFieldAccount && !unlocked ? (
+        <View style={StyleSheet.absoluteFill}>
+          <FieldLockScreen userName={user.name} />
+        </View>
+      ) : null}
+    </View>
+  )
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+})

@@ -87,8 +87,15 @@ export default function HomePage() {
   }
 
   const confirmLogout = () => {
-    const warningMessage =
-      pendingCount + failedCount > 0
+    const isFieldAccount = useAuthStore.getState().user?.accountType === 'FIELD'
+    const warningMessage = isFieldAccount
+      ? // No password to come back with: leaving needs a new code from the office.
+        `Ao sair, este celular só volta a entrar com um novo código de ativação do responsável pelo contrato.${
+          pendingCount + failedCount > 0
+            ? ' Os registros ainda não enviados ficam presos no aparelho até lá: sincronize antes de sair.'
+            : ''
+        }`
+      : pendingCount + failedCount > 0
         ? 'Existem pendencias locais neste aparelho. Se for sair, entre novamente com o mesmo usuario antes de tentar sincronizar.'
         : 'Deseja encerrar sua sessao neste aparelho?'
 
