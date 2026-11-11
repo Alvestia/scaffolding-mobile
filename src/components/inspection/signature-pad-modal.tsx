@@ -67,20 +67,19 @@ export function SignaturePadModal({ visible, signerName, onCancel, onSave }: Sig
     const svg = svgRef.current
     if (!svg || empty) return
     setSaving(true)
-    svg.toDataURL(
-      (base64: string) => {
-        Promise.resolve(onSave(base64))
-          .then(clear)
-          .catch((error: unknown) =>
-            Alert.alert(
-              'Não foi possível salvar a assinatura',
-              error instanceof Error ? error.message : 'Tente novamente.',
-            ),
-          )
-          .finally(() => setSaving(false))
-      },
-      { width: Math.round(size.width), height: Math.round(size.height) },
-    )
+    // No size: on Android a width/height becomes the bitmap size in pixels while the
+    // strokes are drawn at screen density, so the drawing falls outside the image.
+    svg.toDataURL((base64: string) => {
+      Promise.resolve(onSave(base64))
+        .then(clear)
+        .catch((error: unknown) =>
+          Alert.alert(
+            'Não foi possível salvar a assinatura',
+            error instanceof Error ? error.message : 'Tente novamente.',
+          ),
+        )
+        .finally(() => setSaving(false))
+    })
   }
 
   const onLayout = (event: LayoutChangeEvent) => {
