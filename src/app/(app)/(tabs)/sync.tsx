@@ -16,7 +16,7 @@ import { getQueuedExecutionServiceId } from '@/utils/queued-execution'
 
 function getItemTitle(item: OutboxItem) {
   if (item.entityType === OutboxEntityType.EMERGENCY_SCAFFOLD) {
-    return 'Andaime emergencial'
+    return 'Novo andaime'
   }
 
   if (item.entityType === OutboxEntityType.EXECUTION_ENTRY) {

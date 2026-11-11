@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { useMemo, useState } from 'react'
 import {
   FlatList,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { KeyboardAvoider } from '@/components/ui/keyboard-avoider'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { colors, spacing } from '@/constants/theme'
 import { blurActiveElement } from '@/utils/focus'
@@ -72,10 +72,7 @@ export function SearchSelectionStep({
 
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.page}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoider style={styles.page}>
         <View style={styles.header}>
           <Pressable
             onPress={() => {
@@ -194,7 +191,7 @@ export function SearchSelectionStep({
             />
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
     </SafeAreaView>
   )
 }

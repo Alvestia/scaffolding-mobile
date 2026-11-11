@@ -7,7 +7,6 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import {
   FlatList,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -16,6 +15,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { KeyboardAvoider } from '@/components/ui/keyboard-avoider'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Banner } from '@/components/ui/banner'
 import { NetworkStatusIndicator } from '@/components/app/network-status-indicator'
@@ -396,11 +396,7 @@ export default function QueuePage() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
-        style={styles.page}
-      >
+      <KeyboardAvoider style={styles.page}>
         <FlatList
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -909,7 +905,7 @@ export default function QueuePage() {
             {!isConnected ? 'Offline' : 'Atualizar'}
           </Text>
         </Pressable>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
 
       {Platform.OS === 'ios' && nativePickerState ? (
         <Modal

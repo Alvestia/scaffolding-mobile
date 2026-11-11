@@ -3,10 +3,8 @@ import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'ex
 import { router } from 'expo-router'
 import { useRef, useState } from 'react'
 import {
-  KeyboardAvoidingView,
   Linking,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { KeyboardAvoider } from '@/components/ui/keyboard-avoider'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '@/components/ui/button'
 import { colors, radius, spacing } from '@/constants/theme'
@@ -116,10 +115,7 @@ export default function FieldCodePage() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoider style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Pressable onPress={() => router.back()} style={styles.back} hitSlop={8}>
             <Ionicons name="chevron-back" size={18} color={colors.white} />
@@ -165,7 +161,7 @@ export default function FieldCodePage() {
             </Text>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
 
       <Modal visible={scanning} animationType="slide" onRequestClose={() => setScanning(false)}>
         <View style={styles.scanner}>

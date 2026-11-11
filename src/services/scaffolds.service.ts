@@ -172,7 +172,9 @@ export async function createEmergencyScaffold(draft: EmergencyScaffoldDraft, mut
       volumeM3: draft.volumeM3,
       areaM2: draft.areaM2,
       linearM: draft.linearM,
-      origin: 'CAMPO_EMERGENCIAL',
+      // The work order decides: planned with one, emergency without. The server confirms
+      // it, and keeps field scaffolds as emergency where the contract uses the project module.
+      origin: draft.workOrderId ? 'PLANEJADO' : 'CAMPO_EMERGENCIAL',
       components: draft.components?.map((component) => ({
         componentTypeId: component.componentTypeId,
         name: component.name,

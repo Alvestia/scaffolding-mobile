@@ -51,9 +51,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="emergency"
         options={{
-          title: 'Emergencial',
+          title: 'Novo',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="warning-outline" size={size} color={color} />
+            <Ionicons name="add-circle-outline" size={size} color={color} />
           ),
         }}
       />

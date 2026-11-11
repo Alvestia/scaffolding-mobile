@@ -424,9 +424,9 @@ export default function HomePage() {
                 ]}
               >
                 <View style={styles.actionIconWrap}>
-                  <Ionicons name="flash-outline" size={18} color={colors.primaryStrong} />
+                  <Ionicons name="add-circle-outline" size={18} color={colors.primaryStrong} />
                 </View>
-                <Text style={styles.actionTitle}>Andaime emergencial</Text>
+                <Text style={styles.actionTitle}>Novo andaime</Text>
                 <Text style={styles.actionMeta}>Criar em campo</Text>
               </Pressable>
 

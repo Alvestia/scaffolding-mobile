@@ -7,7 +7,6 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -17,6 +16,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { KeyboardAvoider } from '@/components/ui/keyboard-avoider'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Banner } from '@/components/ui/banner'
 import { ExecutionEvidencePicker } from '@/components/execution/execution-evidence-picker'
@@ -885,11 +885,7 @@ export default function ExecuteServicePage() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoider}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
-      >
+      <KeyboardAvoider style={styles.keyboardAvoider}>
         <ScrollView
           ref={scrollViewRef}
           style={styles.scrollView}
@@ -1577,7 +1573,7 @@ export default function ExecuteServicePage() {
             )}
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
 
       {Platform.OS === 'ios' && nativePickerState ? (
         <Modal

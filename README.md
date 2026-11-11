@@ -17,7 +17,7 @@ Aplicativo Expo/React Native para operação de campo do Scaffold, alinhado à A
 - execução em duas etapas: apontamento e finalização;
 - avanço individual por componente e ajustes de metragem no andaime/componente;
 - manutenção de membros da equipe;
-- criação de andaime emergencial com execução inicial;
+- cadastro de andaime em campo (aba "Novo"), planejado ou emergencial conforme a OM/OS, seguindo direto para o lançamento da montagem;
 - evidências locais e upload idempotente;
 - sincronização automática e manual com retentativa;
 - inspeções de andaime offline: leitura do QR Code da placa, checklist, fotos, assinatura e GPS quando a regra exige;
@@ -52,6 +52,17 @@ Rotas consumidas:
 - `POST /auth/refresh`;
 - `POST /auth/logout`;
 - `POST /auth/device-session`.
+
+## Novo andaime
+
+A aba **Novo** cadastra o andaime em campo.
+
+- **Origem.** A OM/OS decide: com ela, o andaime é planejado; sem ela, emergencial. A regra final é da API (`resolveFieldScaffoldOrigin`, em `scaffolding-api/src/scaffolds/scaffolds.service.ts`), que reconhece os cadastros do app pelo `mobileLocalId`. Nos contratos com módulo de projetos, o andaime criado no app é sempre emergencial, porque um planejado ficaria bloqueado até a aprovação do projeto.
+- **Depois de salvar.** O app abre direto o lançamento da montagem do andaime, sem perguntar, online ou offline. A fila filtrada nesse andaime fica por baixo, então "voltar" cai nas atividades dele. Sem serviço de montagem, ou ao criar vários andaimes de uma vez, abre a fila.
+
+## Teclado
+
+O Android desenha a tela de borda a borda e não encolhe mais a janela quando o teclado abre. As telas com campos usam `KeyboardAvoider` (`src/components/ui/keyboard-avoider.tsx`), que mede quanto da tela o teclado cobre e reserva esse espaço, no Android e no iOS. O conteúdo fica num `ScrollView`, que traz o campo em foco para a área visível. Os modais de seleção e de componente continuam com o `KeyboardAvoidingView` nativo.
 
 ## Acesso de campo (sem e-mail)
 

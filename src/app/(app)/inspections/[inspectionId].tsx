@@ -5,8 +5,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { KeyboardAvoider } from '@/components/ui/keyboard-avoider'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NetworkStatusIndicator } from '@/components/app/network-status-indicator'
 import { ChecklistItemCard } from '@/components/inspection/checklist-item-card'
@@ -345,10 +344,7 @@ export default function InspectionExecutionScreen() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoider style={styles.flex}>
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
@@ -555,7 +551,7 @@ export default function InspectionExecutionScreen() {
             )}
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
 
       <SignaturePadModal
         visible={signing}

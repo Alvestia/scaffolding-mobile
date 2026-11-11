@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, View } from 'react-native'
+import { Modal, StyleSheet, Text, View } from 'react-native'
+import { KeyboardAvoider } from '@/components/ui/keyboard-avoider'
 import { Button } from '@/components/ui/button'
 import { TextField } from '@/components/ui/text-field'
 import { colors, radius, spacing } from '@/constants/theme'
@@ -57,10 +58,7 @@ export function ReasonModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.backdrop}
-      >
+      <KeyboardAvoider style={styles.backdrop}>
         <View style={styles.sheet}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.description}>{description}</Text>
@@ -92,7 +90,7 @@ export function ReasonModal({
             </View>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
     </Modal>
   )
 }

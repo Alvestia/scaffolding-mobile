@@ -8,14 +8,14 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { StatusBar } from 'expo-status-bar'
 import {
   Image,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native'
+import { KeyboardAvoider } from '@/components/ui/keyboard-avoider'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { SHIFT_SESSION_TTL_HOURS } from '@/constants/app'
 import { colors, spacing } from '@/constants/theme'
@@ -190,194 +190,206 @@ export default function LoginPage() {
         locations={[0, 0.7, 1]}
         style={styles.gradient}
       >
-        <KeyboardAvoidingView
-          style={styles.keyboard}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.page}>
-            <View style={styles.topSpacer} />
+        <KeyboardAvoider style={styles.keyboard}>
+          {/* Scrolls when the keyboard is open, so the fields and the button stay reachable. */}
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <View style={styles.page}>
+              <View style={styles.topSpacer} />
 
-            <View style={styles.content}>
-              <View style={styles.brandLockup}>
-                <Image source={kaeferWordmark} style={styles.brandLogo} resizeMode="contain" />
-                <Text style={styles.brandSubtitle}>Scaffold Management System</Text>
-              </View>
-
-              <View style={styles.formCard}>
-                <View style={styles.formHeading}>
-                  <Text style={styles.formTitle}>Acesso operacional</Text>
-                  <Text style={styles.formSubtitle}>
-                    Entre com as mesmas credenciais da plataforma Scaffold.
-                  </Text>
-                  {sessionExpired ? (
-                    <Text style={styles.sessionNotice}>
-                      Sua sessão de {SHIFT_SESSION_TTL_HOURS} horas terminou. Entre novamente.
-                    </Text>
-                  ) : null}
-                  {accessEndedNotice ? (
-                    <Text style={styles.sessionNotice}>{accessEndedNotice}</Text>
-                  ) : null}
+              <View style={styles.content}>
+                <View style={styles.brandLockup}>
+                  <Image source={kaeferWordmark} style={styles.brandLogo} resizeMode="contain" />
+                  <Text style={styles.brandSubtitle}>Scaffold Management System</Text>
                 </View>
 
-                <View style={styles.form}>
-                  <Controller
-                    control={control}
-                    name="email"
-                    render={({ field: { onChange, value } }) => (
-                      <View style={styles.fieldBlock}>
-                        <TextInput
-                          value={value}
-                          onChangeText={onChange}
-                          keyboardType="email-address"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          autoComplete="email"
-                          placeholder="Email"
-                          placeholderTextColor="#A2B2B9"
-                          style={[styles.input, errors.email ? styles.inputError : null]}
-                        />
-                        {errors.email?.message ? (
-                          <Text style={styles.fieldError}>{errors.email.message}</Text>
-                        ) : null}
-                      </View>
-                    )}
-                  />
+                <View style={styles.formCard}>
+                  <View style={styles.formHeading}>
+                    <Text style={styles.formTitle}>Acesso operacional</Text>
+                    <Text style={styles.formSubtitle}>
+                      Entre com as mesmas credenciais da plataforma Scaffold.
+                    </Text>
+                    {sessionExpired ? (
+                      <Text style={styles.sessionNotice}>
+                        Sua sessão de {SHIFT_SESSION_TTL_HOURS} horas terminou. Entre novamente.
+                      </Text>
+                    ) : null}
+                    {accessEndedNotice ? (
+                      <Text style={styles.sessionNotice}>{accessEndedNotice}</Text>
+                    ) : null}
+                  </View>
 
-                  <Controller
-                    control={control}
-                    name="password"
-                    render={({ field: { onChange, value } }) => (
-                      <View style={styles.fieldBlock}>
-                        <View
-                          style={[styles.passwordShell, errors.password ? styles.inputError : null]}
-                        >
+                  <View style={styles.form}>
+                    <Controller
+                      control={control}
+                      name="email"
+                      render={({ field: { onChange, value } }) => (
+                        <View style={styles.fieldBlock}>
                           <TextInput
                             value={value}
                             onChangeText={onChange}
-                            secureTextEntry={!showPassword}
+                            keyboardType="email-address"
                             autoCapitalize="none"
                             autoCorrect={false}
-                            autoComplete="current-password"
-                            placeholder="Senha"
+                            autoComplete="email"
+                            placeholder="Email"
                             placeholderTextColor="#A2B2B9"
-                            style={styles.passwordInput}
+                            style={[styles.input, errors.email ? styles.inputError : null]}
                           />
-                          <Pressable
-                            onPress={() => setShowPassword((current) => !current)}
-                            style={({ pressed }) => [
-                              styles.eyeButton,
-                              pressed ? styles.eyeButtonPressed : null,
+                          {errors.email?.message ? (
+                            <Text style={styles.fieldError}>{errors.email.message}</Text>
+                          ) : null}
+                        </View>
+                      )}
+                    />
+
+                    <Controller
+                      control={control}
+                      name="password"
+                      render={({ field: { onChange, value } }) => (
+                        <View style={styles.fieldBlock}>
+                          <View
+                            style={[
+                              styles.passwordShell,
+                              errors.password ? styles.inputError : null,
                             ]}
                           >
-                            <Ionicons
-                              name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                              size={20}
-                              color="#A2B2B9"
+                            <TextInput
+                              value={value}
+                              onChangeText={onChange}
+                              secureTextEntry={!showPassword}
+                              autoCapitalize="none"
+                              autoCorrect={false}
+                              autoComplete="current-password"
+                              placeholder="Senha"
+                              placeholderTextColor="#A2B2B9"
+                              style={styles.passwordInput}
                             />
-                          </Pressable>
+                            <Pressable
+                              onPress={() => setShowPassword((current) => !current)}
+                              style={({ pressed }) => [
+                                styles.eyeButton,
+                                pressed ? styles.eyeButtonPressed : null,
+                              ]}
+                            >
+                              <Ionicons
+                                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                                size={20}
+                                color="#A2B2B9"
+                              />
+                            </Pressable>
+                          </View>
+                          {errors.password?.message ? (
+                            <Text style={styles.fieldError}>{errors.password.message}</Text>
+                          ) : null}
                         </View>
-                        {errors.password?.message ? (
-                          <Text style={styles.fieldError}>{errors.password.message}</Text>
-                        ) : null}
-                      </View>
-                    )}
-                  />
-
-                  <Pressable
-                    onPress={() => setKeepSignedIn((current) => !current)}
-                    disabled={isSubmitting || isBiometricSubmitting}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: keepSignedIn }}
-                    hitSlop={6}
-                    style={styles.keepSignedInRow}
-                  >
-                    <Ionicons
-                      name={keepSignedIn ? 'checkbox' : 'square-outline'}
-                      size={22}
-                      color={keepSignedIn ? colors.primary : colors.borderStrong}
+                      )}
                     />
-                    <View style={styles.keepSignedInTextBlock}>
-                      <Text style={styles.keepSignedInLabel}>Manter conectado neste aparelho</Text>
-                      <Text style={styles.keepSignedInHint}>
-                        {keepSignedIn
-                          ? 'Continua conectado ao reabrir o app. Desmarque em aparelho compartilhado.'
-                          : `A sessão termina em ${SHIFT_SESSION_TTL_HOURS} horas ou ao tocar em Sair.`}
-                      </Text>
-                    </View>
-                  </Pressable>
 
-                  {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
-
-                  <Pressable
-                    onPress={onSubmit}
-                    disabled={isSubmitting || isBiometricSubmitting}
-                    style={({ pressed }) => [
-                      styles.submitButton,
-                      pressed && !isSubmitting && !isBiometricSubmitting
-                        ? styles.submitButtonPressed
-                        : null,
-                      isSubmitting || isBiometricSubmitting ? styles.submitButtonDisabled : null,
-                    ]}
-                  >
-                    <Text style={styles.submitLabel}>
-                      {isSubmitting ? 'Entrando...' : 'Entrar'}
-                    </Text>
-                    <Ionicons name="arrow-forward-outline" size={18} color={colors.white} />
-                  </Pressable>
-
-                  {hasLockedSession ? (
                     <Pressable
-                      onPress={() => void handleBiometricLogin()}
+                      onPress={() => setKeepSignedIn((current) => !current)}
+                      disabled={isSubmitting || isBiometricSubmitting}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: keepSignedIn }}
+                      hitSlop={6}
+                      style={styles.keepSignedInRow}
+                    >
+                      <Ionicons
+                        name={keepSignedIn ? 'checkbox' : 'square-outline'}
+                        size={22}
+                        color={keepSignedIn ? colors.primary : colors.borderStrong}
+                      />
+                      <View style={styles.keepSignedInTextBlock}>
+                        <Text style={styles.keepSignedInLabel}>
+                          Manter conectado neste aparelho
+                        </Text>
+                        <Text style={styles.keepSignedInHint}>
+                          {keepSignedIn
+                            ? 'Continua conectado ao reabrir o app. Desmarque em aparelho compartilhado.'
+                            : `A sessão termina em ${SHIFT_SESSION_TTL_HOURS} horas ou ao tocar em Sair.`}
+                        </Text>
+                      </View>
+                    </Pressable>
+
+                    {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
+
+                    <Pressable
+                      onPress={onSubmit}
                       disabled={isSubmitting || isBiometricSubmitting}
                       style={({ pressed }) => [
-                        styles.biometricButton,
+                        styles.submitButton,
                         pressed && !isSubmitting && !isBiometricSubmitting
-                          ? styles.biometricButtonPressed
+                          ? styles.submitButtonPressed
                           : null,
                         isSubmitting || isBiometricSubmitting ? styles.submitButtonDisabled : null,
                       ]}
                     >
-                      <Ionicons
-                        name="finger-print-outline"
-                        size={18}
-                        color={colors.primaryStrong}
-                      />
-                      <View style={styles.biometricTextBlock}>
-                        <Text style={styles.biometricLabel}>
-                          {isBiometricSubmitting
-                            ? 'Validando biometria...'
-                            : `Entrar com ${biometricLabel ?? 'biometria'}`}
-                        </Text>
-                        {lockedUser ? (
-                          <Text numberOfLines={1} style={styles.biometricHint}>
-                            {lockedUser.name || lockedUser.email}
-                          </Text>
-                        ) : null}
-                      </View>
+                      <Text style={styles.submitLabel}>
+                        {isSubmitting ? 'Entrando...' : 'Entrar'}
+                      </Text>
+                      <Ionicons name="arrow-forward-outline" size={18} color={colors.white} />
                     </Pressable>
-                  ) : null}
 
-                  <Pressable
-                    onPress={() => router.push('/(auth)/field-code' as never)}
-                    disabled={isSubmitting || isBiometricSubmitting}
-                    style={styles.fieldCodeLink}
-                    hitSlop={8}
-                  >
-                    <Ionicons name="qr-code-outline" size={16} color={colors.primaryStrong} />
-                    <Text style={styles.fieldCodeLabel}>
-                      Sem e-mail corporativo? Entrar com código de acesso
-                    </Text>
-                  </Pressable>
+                    {hasLockedSession ? (
+                      <Pressable
+                        onPress={() => void handleBiometricLogin()}
+                        disabled={isSubmitting || isBiometricSubmitting}
+                        style={({ pressed }) => [
+                          styles.biometricButton,
+                          pressed && !isSubmitting && !isBiometricSubmitting
+                            ? styles.biometricButtonPressed
+                            : null,
+                          isSubmitting || isBiometricSubmitting
+                            ? styles.submitButtonDisabled
+                            : null,
+                        ]}
+                      >
+                        <Ionicons
+                          name="finger-print-outline"
+                          size={18}
+                          color={colors.primaryStrong}
+                        />
+                        <View style={styles.biometricTextBlock}>
+                          <Text style={styles.biometricLabel}>
+                            {isBiometricSubmitting
+                              ? 'Validando biometria...'
+                              : `Entrar com ${biometricLabel ?? 'biometria'}`}
+                          </Text>
+                          {lockedUser ? (
+                            <Text numberOfLines={1} style={styles.biometricHint}>
+                              {lockedUser.name || lockedUser.email}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </Pressable>
+                    ) : null}
+
+                    <Pressable
+                      onPress={() => router.push('/(auth)/field-code' as never)}
+                      disabled={isSubmitting || isBiometricSubmitting}
+                      style={styles.fieldCodeLink}
+                      hitSlop={8}
+                    >
+                      <Ionicons name="qr-code-outline" size={16} color={colors.primaryStrong} />
+                      <Text style={styles.fieldCodeLabel}>
+                        Sem e-mail corporativo? Entrar com código de acesso
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            <View style={styles.footer}>
-              <Text style={styles.footerLine}>Scaffold Mobile · Versao {appVersion}</Text>
-              <Text style={styles.footerLineSecondary}>© KAEFER</Text>
+              <View style={styles.footer}>
+                <Text style={styles.footerLine}>Scaffold Mobile · Versao {appVersion}</Text>
+                <Text style={styles.footerLineSecondary}>© KAEFER</Text>
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
+          </ScrollView>
+        </KeyboardAvoider>
       </LinearGradient>
     </SafeAreaView>
   )
@@ -406,6 +418,9 @@ const styles = StyleSheet.create({
   },
   keyboard: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   page: {
     flex: 1,

@@ -6,8 +6,6 @@ import DateTimePicker, {
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { router, useFocusEffect } from 'expo-router'
 import {
-  Alert,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -18,6 +16,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { KeyboardAvoider } from '@/components/ui/keyboard-avoider'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Banner } from '@/components/ui/banner'
 import { ComponentDraftModal } from '@/components/scaffold/component-draft-modal'
@@ -447,6 +446,11 @@ export default function EmergencyPage() {
     return `OS será vinculada ao serviço de ${selectedWorkOrder.type?.toLowerCase()}.`
   }, [selectedWorkOrder])
 
+  // The work order decides the origin; the server has the final word (see the API rule).
+  const originSummary = workOrderId
+    ? 'Planejado, por ter OM/OS. Em contrato com módulo de projetos, entra como emergencial.'
+    : 'Emergencial, por não ter OM/OS.'
+
   const componentBeingEdited =
     editingComponentIndex !== null ? (draftComponents[editingComponentIndex] ?? null) : null
 
@@ -598,72 +602,24 @@ export default function EmergencyPage() {
     }
   }
 
-  const navigateToScaffoldQueue = (scaffoldId?: string | null) => {
-    const target = scaffoldId
+  const scaffoldQueueTarget = (scaffoldId?: string | null) =>
+    scaffoldId
       ? `/(app)/(tabs)/queue?scaffoldId=${encodeURIComponent(scaffoldId)}&saved=emergency-created`
       : '/(app)/(tabs)/queue?saved=emergency-created'
 
+  const navigateToScaffoldQueue = (scaffoldId?: string | null) => {
     blurActiveElement()
-    router.replace(target as never)
+    router.replace(scaffoldQueueTarget(scaffoldId) as never)
   }
 
-  const askForAdvance = (scaffoldId?: string | null, createdCount = 1) => {
-    const message =
-      createdCount > 1
-        ? `${createdCount} andaimes cadastrados com sucesso. Deseja ir agora para a fila e lançar a execução dos serviços criados?`
-        : 'Andaime cadastrado com sucesso. Deseja ir agora para a fila e lançar a execução dos serviços criados?'
-
-    if (Platform.OS === 'web') {
-      const accepted = globalThis.confirm ? globalThis.confirm(message) : true
-      if (accepted) {
-        navigateToScaffoldQueue(scaffoldId)
-        return
-      }
-
-      router.replace('/(app)/(tabs)' as never)
-      return
-    }
-
-    Alert.alert(createdCount > 1 ? 'Andaimes criados' : 'Andaime criado', message, [
-      {
-        text: 'Depois',
-        style: 'cancel',
-        onPress: () => router.replace('/(app)/(tabs)' as never),
-      },
-      {
-        text: 'Lançar agora',
-        onPress: () => navigateToScaffoldQueue(scaffoldId),
-      },
-    ])
-  }
-
-  const askForAdvanceOffline = (createdCount = 1) => {
-    const message =
-      createdCount > 1
-        ? `${createdCount} andaimes salvos localmente. Os serviços já estão disponíveis na fila. Deseja lançar a execução agora? Os dados serão enviados automaticamente quando a conexão for restabelecida.`
-        : 'Andaime salvo localmente. Os serviços já estão disponíveis na fila. Deseja lançar a execução agora? Os dados serão enviados automaticamente quando a conexão for restabelecida.'
-
-    if (Platform.OS === 'web') {
-      const accepted = globalThis.confirm ? globalThis.confirm(message) : false
-      if (accepted) {
-        router.replace('/(app)/(tabs)/queue?saved=queued-local' as never)
-        return
-      }
-      router.replace('/(app)/(tabs)/sync?saved=queued' as never)
-      return
-    }
-
-    Alert.alert(createdCount > 1 ? 'Andaimes salvos offline' : 'Andaime salvo offline', message, [
-      {
-        text: 'Ver pendências',
-        style: 'cancel',
-        onPress: () => router.replace('/(app)/(tabs)/sync?saved=queued' as never),
-      },
-      {
-        text: 'Lançar agora',
-        onPress: () => router.replace('/(app)/(tabs)/queue?saved=queued-local' as never),
-      },
-    ])
+  /**
+   * Straight to the assembly of the new scaffold, without asking. The queue
+   * goes underneath, so "voltar" lands on the activities of that scaffold.
+   */
+  const openAssemblyExecution = (serviceId: string, queueTarget: string) => {
+    blurActiveElement()
+    router.replace(queueTarget as never)
+    router.push(`/(app)/queue/${encodeURIComponent(serviceId)}/execute` as never)
   }
 
   const handleSubmit = async () => {
@@ -672,7 +628,7 @@ export default function EmergencyPage() {
     }
 
     if (!scope || !companyId) {
-      setSubmitError('Defina unidade e contrato antes de criar um andaime emergencial.')
+      setSubmitError('Defina unidade e contrato antes de criar um andaime.')
       return
     }
 
@@ -789,15 +745,20 @@ export default function EmergencyPage() {
         }
 
         await refreshState()
+        resetEmergencyForm()
 
-        if (localStubs.length > 0) {
-          resetEmergencyForm()
-          askForAdvanceOffline()
+        const localAssembly = localStubs.find(
+          (stub) => stub.type === ScaffoldServiceType.MONTAGEM,
+        )
+        if (localAssembly) {
+          openAssemblyExecution(localAssembly.localId, '/(app)/(tabs)/queue?saved=queued-local')
           return
         }
-
-        resetEmergencyForm()
-        router.replace('/(app)/(tabs)/sync?saved=queued' as never)
+        router.replace(
+          (localStubs.length > 0
+            ? '/(app)/(tabs)/queue?saved=queued-local'
+            : '/(app)/(tabs)/sync?saved=queued') as never,
+        )
         return
       }
 
@@ -818,21 +779,20 @@ export default function EmergencyPage() {
 
       const createdScaffolds = isScaffoldBatchResponse(scaffold) ? scaffold.items : [scaffold]
       const createdCount = isScaffoldBatchResponse(scaffold) ? scaffold.count : 1
-      const singleScaffoldId = createdCount === 1 ? createdScaffolds[0]?.id : undefined
-      const hasCreatedServices = createdScaffolds.some(
-        (item) => (item.scaffoldServices?.length ?? 0) > 0,
-      )
-
-      if (hasCreatedServices) {
-        resetEmergencyForm()
-        askForAdvance(singleScaffoldId, createdCount)
-        return
-      }
+      const singleScaffold = createdCount === 1 ? createdScaffolds[0] : undefined
+      const assemblyServiceId = singleScaffold?.scaffoldServices?.find(
+        (service) => service.type === ScaffoldServiceType.MONTAGEM,
+      )?.id
 
       resetEmergencyForm()
-      navigateToScaffoldQueue(singleScaffoldId)
+      if (singleScaffold && assemblyServiceId) {
+        openAssemblyExecution(assemblyServiceId, scaffoldQueueTarget(singleScaffold.id))
+        return
+      }
+      // Several scaffolds at once, or no assembly service: the queue shows what was created.
+      navigateToScaffoldQueue(singleScaffold?.id)
     } catch (error) {
-      setSubmitError(getErrorMessage(error, 'Não foi possível registrar o andaime emergencial.'))
+      setSubmitError(getErrorMessage(error, 'Não foi possível registrar o andaime.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -840,11 +800,7 @@ export default function EmergencyPage() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoider}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
-      >
+      <KeyboardAvoider style={styles.keyboardAvoider}>
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -856,9 +812,9 @@ export default function EmergencyPage() {
           <View style={styles.page}>
             <View style={styles.headerRow}>
               <View style={styles.headerTextBlock}>
-                <Text style={styles.headerTitle}>Andaime emergencial</Text>
+                <Text style={styles.headerTitle}>Novo andaime</Text>
                 <Text style={styles.headerSubtitle}>
-                  Cadastre primeiro. Depois decidimos se seguimos direto para a fila de execução.
+                  Cadastre o andaime e siga direto para o lançamento da montagem.
                 </Text>
               </View>
             </View>
@@ -869,7 +825,7 @@ export default function EmergencyPage() {
               <View style={styles.contextMissingCard}>
                 <Text style={styles.contextMissingTitle}>Prepare a jornada antes</Text>
                 <Text style={styles.contextMissingDescription}>
-                  O cadastro emergencial precisa de unidade e contrato definidos.
+                  O cadastro precisa de unidade e contrato definidos.
                 </Text>
                 <Pressable
                   onPress={() => {
@@ -1015,7 +971,7 @@ export default function EmergencyPage() {
                         ? [selectedWorkOrder.type, selectedWorkOrder.status]
                             .filter(Boolean)
                             .join(' • ')
-                        : 'Vincule se já houver OS.'
+                        : 'Com OM/OS o andaime é planejado; sem ela, emergencial.'
                     }
                     onPress={() => setActivePicker('workOrder')}
                   />
@@ -1286,7 +1242,7 @@ export default function EmergencyPage() {
 
                 <Section
                   title="Próximo passo"
-                  subtitle="Depois de cadastrar, perguntamos se você já quer seguir direto para a fila e lançar a execução."
+                  subtitle="Depois de cadastrar, o app abre direto o lançamento da montagem deste andaime."
                 >
                   <View style={styles.creationSummaryCard}>
                     <View style={styles.creationSummaryRow}>
@@ -1297,13 +1253,17 @@ export default function EmergencyPage() {
                       <Text style={styles.creationSummaryLabel}>OS</Text>
                       <Text style={styles.creationSummaryText}>{workOrderLinkSummary}</Text>
                     </View>
+                    <View style={styles.creationSummaryRow}>
+                      <Text style={styles.creationSummaryLabel}>Origem</Text>
+                      <Text style={styles.creationSummaryText}>{originSummary}</Text>
+                    </View>
                   </View>
 
                   <View style={styles.nextStepCard}>
                     <Ionicons name="flash-outline" size={18} color={colors.primaryStrong} />
                     <Text style={styles.nextStepText}>
-                      Se os serviços forem criados agora, o app já pode abrir a fila filtrada nesse
-                      novo andaime.
+                      Sem serviço de montagem (ou ao criar vários andaimes de uma vez), o app abre a
+                      fila filtrada no que foi criado.
                     </Text>
                   </View>
                 </Section>
@@ -1322,14 +1282,14 @@ export default function EmergencyPage() {
                   disabled={isSubmitting}
                 >
                   <Text style={styles.primaryButtonLabel}>
-                    {isSubmitting ? 'Cadastrando...' : 'Cadastrar andaime emergencial'}
+                    {isSubmitting ? 'Cadastrando...' : 'Cadastrar andaime'}
                   </Text>
                 </Pressable>
               </>
             )}
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
 
       {Platform.OS === 'ios' && nativeDatePickerState ? (
         <Modal
@@ -1379,7 +1339,7 @@ export default function EmergencyPage() {
       <SelectionModal
         visible={activePicker === 'scaffoldType'}
         title="Tipo de andaime"
-        subtitle="Defina a tipologia principal deste emergencial."
+        subtitle="Defina a tipologia principal deste andaime."
         options={scaffoldTypeOptions}
         selectedValue={scaffoldTypeId}
         onSelect={setScaffoldTypeId}
