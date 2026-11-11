@@ -27,6 +27,21 @@ function getItemTitle(item: OutboxItem) {
     return 'Desvio operacional'
   }
 
+  if (item.entityType === OutboxEntityType.INSPECTION_SUBMISSION) {
+    const payload = item.payload as { scaffoldCode?: string; complete?: boolean } | undefined
+    return `${payload?.complete === false ? 'Respostas de inspeção' : 'Inspeção'} ${payload?.scaffoldCode ?? ''}`.trim()
+  }
+
+  if (item.entityType === OutboxEntityType.INSPECTION_MANUAL) {
+    const payload = item.payload as { scaffoldCode?: string } | undefined
+    return `Nova inspeção ${payload?.scaffoldCode ?? ''}`.trim()
+  }
+
+  if (item.entityType === OutboxEntityType.SCAFFOLD_INTERDICTION) {
+    const payload = item.payload as { scaffoldCode?: string } | undefined
+    return `Interdição ${payload?.scaffoldCode ?? ''}`.trim()
+  }
+
   return 'Atualização operacional'
 }
 
@@ -43,6 +58,21 @@ function getItemDescription(item: OutboxItem) {
     return item.remoteId
       ? 'Fotos do desvio aguardando reenvio ao backend.'
       : 'Desvio salvo no aparelho aguardando envio ao backend.'
+  }
+
+  if (item.entityType === OutboxEntityType.INSPECTION_SUBMISSION) {
+    const payload = item.payload as { answersSent?: boolean; evidences?: unknown[] } | undefined
+    return payload?.answersSent
+      ? `Respostas enviadas; ${payload.evidences?.length ?? 0} arquivo(s) e a conclusão aguardando envio.`
+      : 'Checklist feito no aparelho aguardando envio.'
+  }
+
+  if (item.entityType === OutboxEntityType.INSPECTION_MANUAL) {
+    return 'Inspeção manual criada no aparelho aguardando envio.'
+  }
+
+  if (item.entityType === OutboxEntityType.SCAFFOLD_INTERDICTION) {
+    return 'Interdição registrada no aparelho aguardando envio. Até lá, o andaime só está interditado neste aparelho.'
   }
 
   return 'Registro operacional pendente de sincronização.'

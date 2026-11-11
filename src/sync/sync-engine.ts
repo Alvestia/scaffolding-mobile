@@ -39,6 +39,17 @@ import { getErrorMessage } from '@/utils/error'
 import { createLocalId, isLocalId } from '@/utils/id'
 import { normalizeQueuedExecutionPayload } from '@/utils/queued-execution'
 import { assertOfflineOwnerContext, captureOfflineOwnerContext } from '@/security/offline-owner'
+import type {
+  InspectionSubmissionPayload,
+  ManualInspectionPayload,
+  ScaffoldInterdictionPayload,
+} from '@/types/inspection'
+import {
+  syncInspectionData,
+  syncInspectionSubmission,
+  syncManualInspection,
+  syncScaffoldInterdiction,
+} from '@/sync/inspection-sync'
 
 type SyncScope = {
   contractId: string
@@ -415,6 +426,24 @@ async function syncOutbox(ownerContext: OfflineOwnerContext) {
           ownerContext,
         )
       }
+
+      if (item.entityType === OutboxEntityType.SCAFFOLD_INTERDICTION) {
+        await syncScaffoldInterdiction(
+          item as OutboxItem<ScaffoldInterdictionPayload>,
+          ownerContext,
+        )
+      }
+
+      if (item.entityType === OutboxEntityType.INSPECTION_MANUAL) {
+        await syncManualInspection(item as OutboxItem<ManualInspectionPayload>, ownerContext)
+      }
+
+      if (item.entityType === OutboxEntityType.INSPECTION_SUBMISSION) {
+        await syncInspectionSubmission(
+          item as OutboxItem<InspectionSubmissionPayload>,
+          ownerContext,
+        )
+      }
     } catch (error) {
       assertOfflineOwnerContext(ownerContext)
       const permanent = isPermanentSyncError(error)
@@ -476,7 +505,11 @@ export async function runFullSync(scope?: SyncScope, options?: RunFullSyncOption
   activeSyncPromise = (async () => {
     await syncOutbox(ownerContext)
     if (options?.includeQueue !== false) {
-      await Promise.all([syncQueue(ownerContext, scope), syncLatestScaffold(ownerContext, scope)])
+      await Promise.all([
+        syncQueue(ownerContext, scope),
+        syncLatestScaffold(ownerContext, scope),
+        syncInspectionData(ownerContext, scope),
+      ])
     }
     assertOfflineOwnerContext(ownerContext)
     await syncStateRepository.set('lastSyncAt', nowIso())

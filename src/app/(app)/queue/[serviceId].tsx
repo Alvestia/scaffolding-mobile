@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { NetworkStatusIndicator } from '@/components/app/network-status-indicator'
+import { ScaffoldAvailabilityWarning } from '@/components/inspection/scaffold-availability-warning'
 import { Banner } from '@/components/ui/banner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { colors, radius, spacing } from '@/constants/theme'
@@ -87,6 +88,7 @@ export default function QueueDetailPage() {
           </View>
 
           <NetworkStatusIndicator />
+          <ScaffoldAvailabilityWarning scaffoldId={service?.scaffoldId} />
 
           {serviceQuery.isLoading ? (
             <View style={styles.loadingCard}>

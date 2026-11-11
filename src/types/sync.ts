@@ -16,6 +16,9 @@ export const OutboxEntityType = {
   CREW_MEMBER_ADD: 'crew_member_add',
   CREW_MEMBER_REMOVE: 'crew_member_remove',
   OPERATIONAL_DEVIATION: 'operational_deviation',
+  INSPECTION_SUBMISSION: 'inspection_submission',
+  INSPECTION_MANUAL: 'inspection_manual',
+  SCAFFOLD_INTERDICTION: 'scaffold_interdiction',
 } as const
 
 export type OutboxEntityType = (typeof OutboxEntityType)[keyof typeof OutboxEntityType]

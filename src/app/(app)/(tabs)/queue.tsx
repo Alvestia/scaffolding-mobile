@@ -19,9 +19,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Banner } from '@/components/ui/banner'
 import { NetworkStatusIndicator } from '@/components/app/network-status-indicator'
+import { AvailabilityBadge } from '@/components/inspection/availability-badge'
 import { SelectionModal, type SelectionOption } from '@/components/ui/selection-modal'
 import { colors, radius, spacing } from '@/constants/theme'
 import { useExecutionQueue } from '@/hooks/use-execution-queue'
+import { useAvailabilityMap, usePendingInspectionWork } from '@/hooks/use-inspections'
 import type { QueueServiceItem } from '@/types/scaffold-service'
 import { useConnectivityStore } from '@/store/connectivity-store'
 import { useOperationalContextStore } from '@/store/operational-context-store'
@@ -97,6 +99,16 @@ function getStatusTone(item: QueueServiceItem) {
   return item.status === 'EM_EXECUCAO' ? styles.statusSuccess : styles.statusWarning
 }
 
+/** Released scaffolds and those out of use (being assembled, dismantled) need no warning. */
+function shouldWarnAvailability(
+  availability: { status: string; overdue: boolean } | undefined,
+  localInterdiction: boolean,
+) {
+  if (localInterdiction) return true
+  if (!availability || availability.status === 'NOT_APPLICABLE') return false
+  return availability.status !== 'RELEASED' || availability.overdue
+}
+
 export default function QueuePage() {
   const router = useRouter()
   const { saved, scaffoldId } = useLocalSearchParams<{ saved?: string; scaffoldId?: string }>()
@@ -159,6 +171,9 @@ export default function QueuePage() {
   }, [endDate, isCronogramaActive, startDate, statusFilter])
 
   const queueQuery = useExecutionQueue({ contractId, unitId }, queueFilters)
+  // Warns who executes when the scaffold is interdicted or not released by inspection.
+  const availabilityMap = useAvailabilityMap({ contractId, unitId })
+  const pendingInspectionWork = usePendingInspectionWork()
 
   const scope = useMemo(
     () =>
@@ -400,6 +415,21 @@ export default function QueuePage() {
                 <View style={styles.groupHeader}>
                   <View style={styles.groupHeaderText}>
                     <Text style={styles.groupTitle}>{item.scaffold?.code ?? 'Andaime local'}</Text>
+                    {shouldWarnAvailability(
+                      availabilityMap.byScaffold.get(item.scaffoldId),
+                      pendingInspectionWork.interdictions.has(item.scaffoldId),
+                    ) ? (
+                      <AvailabilityBadge
+                        availability={
+                          availabilityMap.byScaffold.get(item.scaffoldId) ?? {
+                            status: 'INTERDICTED',
+                            overdue: false,
+                          }
+                        }
+                        localInterdiction={pendingInspectionWork.interdictions.has(item.scaffoldId)}
+                        compact
+                      />
+                    ) : null}
                     <Text style={styles.groupSubtitle} numberOfLines={1}>
                       {[
                         item.scaffold?.scaffoldType?.name,

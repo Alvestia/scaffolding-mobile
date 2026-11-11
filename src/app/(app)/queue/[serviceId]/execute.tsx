@@ -23,6 +23,7 @@ import { ExecutionEvidencePicker } from '@/components/execution/execution-eviden
 import { ExecutionComponentAdvanceSection } from '@/components/execution/execution-component-advance-section'
 import { ExecutionMeasurementAdjustmentSection } from '@/components/execution/execution-measurement-adjustment-section'
 import { NetworkStatusIndicator } from '@/components/app/network-status-indicator'
+import { ScaffoldAvailabilityWarning } from '@/components/inspection/scaffold-availability-warning'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { SelectionModal, type SelectionOption } from '@/components/ui/selection-modal'
@@ -934,6 +935,7 @@ export default function ExecuteServicePage() {
             </View>
 
             <NetworkStatusIndicator />
+            <ScaffoldAvailabilityWarning scaffoldId={service?.scaffoldId} />
             {basisChanged && service && <View style={{ gap: 8, padding: 12 }}>
               <Banner tone="warning" title="A quantidade do serviço mudou" description={`Base anterior: ${draftBasis?.quantity ?? 'não registrada'}. Base atual: ${service.plannedQuantity}. Confirme o tratamento do lançamento e confira novamente os componentes.`} />
               {draftBasis?.quantity != null && draftBasis.unit === service.plannedUnit ? <>

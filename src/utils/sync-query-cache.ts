@@ -17,6 +17,8 @@ const SYNCED_QUERIES = new Set([
   'scaffold-component-types',
   'scaffold-components',
   'deviation-types',
+  'inspection-pack',
+  'availability-map',
 ])
 
 export function invalidateSyncedQueries(queryClient: QueryClient) {

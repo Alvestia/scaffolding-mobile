@@ -273,6 +273,7 @@ test('the sync engine preserves the draft and requires manual review after a bas
       throw error
     } },
   }
+  mocks['@/sync/inspection-sync'] = {}
   for (const name of ['crews', 'execution-media', 'deviation-media', 'operational-deviations',
     'scaffold-measurement-adjustments', 'scaffold-services', 'scaffolds']) {
     mocks[`@/services/${name}.service`] = {}

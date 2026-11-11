@@ -22,6 +22,7 @@ test('automatic and repeated manual triggers cannot overlap an active manual syn
     },
     '@/services/execution-media.service': {},
     '@/services/deviation-media.service': {},
+    '@/services/inspections.service': {},
     '@/services/manual-sync.service': {
       runManualSync: async () => {
         manualRuns++
@@ -58,6 +59,7 @@ test('failed manual sync releases the lock and can be retried', async () => {
     },
     '@/services/execution-media.service': {},
     '@/services/deviation-media.service': {},
+    '@/services/inspections.service': {},
     '@/services/manual-sync.service': {
       runManualSync: async () => {
         if (fail) throw new Error('rede indisponível')

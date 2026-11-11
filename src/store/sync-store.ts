@@ -14,6 +14,9 @@ import { OutboxEntityType, SyncStatus, type OutboxItem } from '@/types/sync'
 import { getErrorMessage } from '@/utils/error'
 import { normalizeQueuedExecutionPayload } from '@/utils/queued-execution'
 
+import { removeInspectionEvidenceFiles } from '@/services/inspections.service'
+import type { InspectionSubmissionPayload } from '@/types/inspection'
+
 type SyncStore = {
   isSyncing: boolean
   lastSyncAt: string | null
@@ -165,6 +168,11 @@ export const useSyncStore = create<SyncStore>((set, get) => ({
     if (currentItem?.entityType === OutboxEntityType.OPERATIONAL_DEVIATION) {
       const payload = currentItem.payload as OperationalDeviationDraft | undefined
       await cleanupDeviationEvidenceDrafts(payload?.evidences)
+    }
+
+    if (currentItem?.entityType === OutboxEntityType.INSPECTION_SUBMISSION) {
+      const payload = currentItem.payload as InspectionSubmissionPayload | undefined
+      await removeInspectionEvidenceFiles(payload?.evidences)
     }
 
     await outboxRepository.remove(localId)

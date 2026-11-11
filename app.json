@@ -28,7 +28,8 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.SYSTEM_ALERT_WINDOW"
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
       ]
     },
     "web": {
@@ -64,9 +65,29 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Permita que o Scaffold Mobile use a câmera para registrar evidências de execuções e desvios.",
-          "photosPermission": "Selecione fotos para anexar como evidências de execuções e desvios no Scaffold Mobile.",
+          "cameraPermission": "Permita que o Scaffold Mobile use a câmera para fotografar evidências de execuções, desvios e inspeções e para ler o QR Code das placas de andaime.",
+          "photosPermission": "Selecione fotos para anexar como evidências de execuções, desvios e inspeções no Scaffold Mobile.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permita que o Scaffold Mobile use a câmera para fotografar evidências de execuções, desvios e inspeções e para ler o QR Code das placas de andaime.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Permita que o Scaffold Mobile registre a localização ao concluir inspeções de andaime que exigem GPS.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
         }
       ],
       "expo-web-browser"

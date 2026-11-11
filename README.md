@@ -18,7 +18,10 @@ Aplicativo Expo/React Native para operação de campo do Scaffold, alinhado à A
 - manutenção de membros da equipe;
 - criação de andaime emergencial com execução inicial;
 - evidências locais e upload idempotente;
-- sincronização automática e manual com retentativa.
+- sincronização automática e manual com retentativa;
+- inspeções de andaime offline: leitura do QR Code da placa, checklist, fotos, assinatura e GPS quando a regra exige;
+- interdição de andaime e inspeção manual (extraordinária ou avulsa);
+- aviso de disponibilidade (interditado, aguardando liberação, com restrição) na fila de execução.
 
 O app não possui fluxo local de primeiro acesso/troca de senha nem cadastro de turno, porque essas capacidades não fazem parte do backend atual.
 
@@ -63,6 +66,20 @@ Mesmo quando há rede, mutações operacionais passam pelo mesmo mecanismo confi
 Na execução, a primeira etapa reúne produção, equipe, componentes e período. A finalização concentra revisão, observações, descontos/acréscimos e evidências. O app cria o apontamento, vincula os ajustes ao ID remoto criado e só depois envia as fotos.
 
 Itens confirmados são removidos da outbox; pendências e evidências nunca são apagadas antes da confirmação remota.
+
+## Inspeções
+
+A aba **Inspeções** aparece para quem tem `inspection:view` e só mostra conteúdo nos contratos com política de inspeção publicada. Regras de negócio e rotas da API: `scaffolding-api/docs/inspecoes.md`.
+
+- **Base offline.** A sincronização baixa, por contrato, `GET /inspections/offline-pack`: inspeções abertas com o que já foi respondido, os checklists usados e os andaimes em campo com a disponibilidade. Fica no SQLite (`reference_records`) e é usada sem rede.
+- **QR Code.** A câmera lê a placa (`<front>/placa/<código>`). O app calcula o SHA-256 do código e procura o andaime pelo `plateHash` da base; o código da placa, que abre a página pública, não é guardado no aparelho.
+- **Execução.** O rascunho (respostas, fotos e assinatura) é salvo no aparelho a cada alteração. Antes de concluir, o app aplica as mesmas regras da API: itens obrigatórios, justificativas, fotos por item, fotos só da câmera, assinatura e GPS. Quem tem `inspection:perform` sem `inspection:release` envia as respostas sem concluir.
+- **Envio.** "Concluir" põe a inspeção na outbox (`inspection_submission`). A sincronização confere se ninguém mais assumiu a inspeção, inicia com a hora do aparelho, envia as respostas, cada arquivo (`Idempotency-Key` por arquivo) e conclui com `clientMutationId`. Uma falha no meio retoma do ponto em que parou. Inspeção concluída ou assumida por outra pessoa vira **Conflito** em Pendências.
+- **GPS.** Pedido só ao concluir uma inspeção cuja regra exige localização, em primeiro plano, sem rastreamento em segundo plano (`ACCESS_BACKGROUND_LOCATION` bloqueada). Depende do aval da CIT (LGPD).
+- **Interdição e inspeção manual.** Com rede, são enviadas na hora; sem rede, vão para a outbox (`scaffold_interdiction`, `inspection_manual`) e o andaime aparece como "Interditado (no aparelho)" até o envio. A inspeção manual usa `Idempotency-Key`: o reenvio devolve a mesma inspeção. A retirada da interdição continua no sistema web.
+- **Fila de execução.** `GET /inspections/availability-map` (exige `scaffold:view`) alimenta o selo no cabeçalho de cada andaime da fila e o aviso no detalhe e no lançamento do serviço.
+
+Módulos nativos usados: `expo-camera` (QR Code), `expo-location` (GPS) e `react-native-svg` (assinatura). Ao adicioná-los, é preciso gerar um novo APK; a atualização OTA não basta.
 
 ## Configuração
 

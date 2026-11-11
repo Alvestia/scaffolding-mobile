@@ -25,6 +25,7 @@ function executionScreen() {
     '@/hooks/use-scaffold-components': { useScaffoldComponents: () => ({ data: [] }) },
     '@/services/employees.service': {}, '@/services/work-functions.service': {},
     '@/utils/id': {}, '@/utils/focus': {},
+    '@/components/inspection/scaffold-availability-warning': { ScaffoldAvailabilityWarning: () => null },
   }
   for (const [file, name] of [
     ['ui/banner', 'Banner'], ['ui/empty-state', 'EmptyState'], ['ui/segmented-control', 'SegmentedControl'],

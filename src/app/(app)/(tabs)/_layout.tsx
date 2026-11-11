@@ -2,9 +2,12 @@ import { Ionicons } from '@expo/vector-icons'
 import { Tabs } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors } from '@/constants/theme'
+import { useAuthStore } from '@/store/auth-store'
+import { hasPermission } from '@/utils/inspection-rules'
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets()
+  const canSeeInspections = useAuthStore((state) => hasPermission(state.user, 'inspection:view'))
 
   return (
     <Tabs
@@ -60,6 +63,17 @@ export default function TabsLayout() {
           title: 'Desvios',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="alert-circle-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="inspections"
+        options={{
+          title: 'Inspeções',
+          // Hidden for profiles without access to inspections.
+          href: canSeeInspections ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="shield-checkmark-outline" size={size} color={color} />
           ),
         }}
       />
