@@ -28,6 +28,14 @@ import { outboxRepository } from '@/database/repositories/outbox-repository'
 import { useQuery } from '@tanstack/react-query'
 import { useDeviationTypes } from '@/hooks/use-deviation-types'
 import { useCrews } from '@/hooks/use-crews'
+import { useExecutionQueue } from '@/hooks/use-execution-queue'
+import { useWorkOrders } from '@/hooks/use-work-orders'
+import {
+  deviationLinkFields,
+  linkableWorkOrders,
+  scaffoldsForWorkOrder,
+  scaffoldsFromQueue,
+} from '@/utils/deviation-links'
 import { createOperationalDeviation } from '@/services/operational-deviations.service'
 import { fetchEmployees, getCachedEmployees } from '@/services/employees.service'
 import { fetchWorkFunctions, getCachedWorkFunctions } from '@/services/work-functions.service'
@@ -60,7 +68,17 @@ import { getErrorMessage } from '@/utils/error'
 import { blurActiveElement } from '@/utils/focus'
 import { createLocalId } from '@/utils/id'
 
-type PickerKey = 'deviationType' | 'crew' | 'members' | 'functions' | null
+type PickerKey =
+  | 'deviationType'
+  | 'workOrder'
+  | 'scaffold'
+  | 'crew'
+  | 'members'
+  | 'functions'
+  | null
+
+/** First option of the link pickers: the deviation can stay without a link. */
+const NO_LINK = { value: '', label: 'Sem vínculo', sublabel: 'Desvio do contrato como um todo' }
 type DateTimeFieldKey = 'occurredDate' | 'occurredTime' | 'resolvedDate' | 'resolvedTime'
 type NativePickerState = { field: DateTimeFieldKey; mode: 'date' | 'time' }
 
@@ -137,6 +155,8 @@ export default function DeviationsPage() {
 
   const [activePicker, setActivePicker] = useState<PickerKey>(null)
   const [deviationTypeId, setDeviationTypeId] = useState('')
+  const [linkWorkOrderId, setLinkWorkOrderId] = useState('')
+  const [linkScaffoldId, setLinkScaffoldId] = useState('')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [responsibility, setResponsibility] = useState<DeviationResponsibility>(
@@ -190,6 +210,9 @@ export default function DeviationsPage() {
   })
 
   const crewsQuery = useCrews({ contractId, unitId })
+  // Both work offline: the work orders are cached and the scaffolds come from the queue.
+  const workOrdersQuery = useWorkOrders({ contractId, unitId })
+  const queueQuery = useExecutionQueue({ contractId, unitId })
   const workFunctionsQuery = useQuery({
     queryKey: ['deviation-work-functions', contractId, unitId, isConnected],
     enabled: Boolean(contractId && unitId),
@@ -228,6 +251,46 @@ export default function DeviationsPage() {
       })),
     [deviationTypesQuery.data],
   )
+
+  const workOrders = useMemo(
+    () => linkableWorkOrders(workOrdersQuery.data ?? [], { contractId, unitId }),
+    [contractId, unitId, workOrdersQuery.data],
+  )
+  const scaffolds = useMemo(() => scaffoldsFromQueue(queueQuery.data ?? []), [queueQuery.data])
+  const linkedWorkOrder = workOrders.find((item) => item.id === linkWorkOrderId) ?? null
+  const linkedScaffold = scaffolds.find((item) => item.id === linkScaffoldId) ?? null
+
+  const workOrderOptions: SelectionOption[] = useMemo(
+    () => [
+      NO_LINK,
+      ...workOrders.map((item) => ({
+        value: item.id,
+        label: item.code,
+        sublabel: [item.type, item.areaRef?.name].filter(Boolean).join(' • ') || undefined,
+      })),
+    ],
+    [workOrders],
+  )
+  const scaffoldOptions: SelectionOption[] = useMemo(
+    () => [
+      NO_LINK,
+      ...scaffoldsForWorkOrder(scaffolds, linkWorkOrderId).map((item) => ({
+        value: item.id,
+        label: item.code,
+        sublabel: [item.location, item.description].filter(Boolean).join(' • ') || undefined,
+      })),
+    ],
+    [linkWorkOrderId, scaffolds],
+  )
+
+  const selectLinkWorkOrder = (value: string) => {
+    setLinkWorkOrderId(value)
+    // A scaffold that does not belong to the new work order is dropped.
+    const stillLinked = scaffoldsForWorkOrder(scaffolds, value).some(
+      (item) => item.id === linkScaffoldId,
+    )
+    if (!stillLinked) setLinkScaffoldId('')
+  }
 
   const selectedDeviationType = useMemo(
     () => (deviationTypesQuery.data ?? []).find((item) => item.id === deviationTypeId) ?? null,
@@ -360,6 +423,8 @@ export default function DeviationsPage() {
 
   const resetForm = () => {
     setDeviationTypeId('')
+    setLinkWorkOrderId('')
+    setLinkScaffoldId('')
     setTitle('')
     setDescription('')
     setResponsibility(DeviationResponsibility.KAEFER)
@@ -412,7 +477,7 @@ export default function DeviationsPage() {
       resolvedAt: resolvedAtDate.toISOString(),
       memberEmployeeIds: laborMode === 'CREW' ? selectedMemberIds : undefined,
       functionQuantities: laborMode === 'FUNCTION_QUANTITY' ? functionQuantities : undefined,
-      isGlobal: true,
+      ...deviationLinkFields({ workOrderId: linkWorkOrderId, scaffoldId: linkScaffoldId }),
       companyId,
       unitId,
       contractId,
@@ -674,6 +739,46 @@ export default function DeviationsPage() {
                       ]}
                     />
                   </View>
+                </Section>
+
+                <Section
+                  title="Onde ocorreu"
+                  subtitle="Opcional: vincule a ordem de serviço e/ou o andaime afetado. Sem vínculo, o desvio vale para o contrato."
+                >
+                  <SelectTrigger
+                    label="Ordem de serviço"
+                    value={linkedWorkOrder?.code ?? null}
+                    placeholder="Sem vínculo"
+                    helper={
+                      linkedWorkOrder
+                        ? [linkedWorkOrder.type, linkedWorkOrder.areaRef?.name]
+                            .filter(Boolean)
+                            .join(' • ') || null
+                        : workOrders.length === 0
+                          ? 'Nenhuma OS aberta neste contrato'
+                          : 'Opcional'
+                    }
+                    onPress={() => setActivePicker('workOrder')}
+                    disabled={workOrders.length === 0}
+                  />
+                  <SelectTrigger
+                    label="Andaime"
+                    value={linkedScaffold?.code ?? null}
+                    placeholder="Sem vínculo"
+                    helper={
+                      linkedScaffold
+                        ? [linkedScaffold.location, linkedScaffold.description]
+                            .filter(Boolean)
+                            .join(' • ') || null
+                        : scaffoldOptions.length <= 1
+                          ? linkWorkOrderId
+                            ? 'Nenhum andaime desta OS na fila'
+                            : 'Nenhum andaime com atividades na fila'
+                          : 'Opcional · andaimes com atividades na fila'
+                    }
+                    onPress={() => setActivePicker('scaffold')}
+                    disabled={scaffoldOptions.length <= 1}
+                  />
                 </Section>
 
                 <Section title="Quando ocorreu" subtitle="Informe a data e o horário do evento.">
@@ -1099,6 +1204,28 @@ export default function DeviationsPage() {
         </Modal>
       ) : null}
 
+      <SelectionModal
+        visible={activePicker === 'workOrder'}
+        title="Ordem de serviço"
+        subtitle="OS em andamento deste contrato."
+        options={workOrderOptions}
+        selectedValue={linkWorkOrderId}
+        onSelect={selectLinkWorkOrder}
+        onClose={() => setActivePicker(null)}
+      />
+      <SelectionModal
+        visible={activePicker === 'scaffold'}
+        title="Andaime"
+        subtitle={
+          linkedWorkOrder
+            ? `Andaimes da OS ${linkedWorkOrder.code} com atividades na fila.`
+            : 'Andaimes com atividades na fila de execução.'
+        }
+        options={scaffoldOptions}
+        selectedValue={linkScaffoldId}
+        onSelect={setLinkScaffoldId}
+        onClose={() => setActivePicker(null)}
+      />
       <SelectionModal
         visible={activePicker === 'deviationType'}
         title="Tipo de desvio"

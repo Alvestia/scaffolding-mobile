@@ -13,7 +13,7 @@ Aplicativo Expo/React Native para operação de campo do Scaffold, alinhado à A
 - reentrada offline com credencial no SecureStore e biometria opcional;
 - escolha de unidade, contrato e equipe operacional;
 - fila de execução com cache local;
-- apontamentos e desvios operacionais online ou offline;
+- apontamentos e desvios operacionais online ou offline; o desvio pode ser vinculado a uma OS e/ou a um andaime (com atividades na fila) ou ficar geral do contrato;
 - execução em duas etapas: apontamento e finalização;
 - avanço individual por componente e ajustes de metragem no andaime/componente;
 - manutenção de membros da equipe;
