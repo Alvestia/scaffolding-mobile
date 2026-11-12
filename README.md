@@ -62,7 +62,7 @@ A aba **Novo** cadastra o andaime em campo.
 
 ## Teclado
 
-O Android desenha a tela de borda a borda e não encolhe mais a janela quando o teclado abre. As telas com campos usam `KeyboardAvoider` (`src/components/ui/keyboard-avoider.tsx`), que mede quanto da tela o teclado cobre e reserva esse espaço, no Android e no iOS. O conteúdo fica num `ScrollView`, que traz o campo em foco para a área visível. Os modais de seleção e de componente continuam com o `KeyboardAvoidingView` nativo.
+O Android desenha a tela de borda a borda e não encolhe mais a janela quando o teclado abre. As telas com campos usam `KeyboardAvoider` (`src/components/ui/keyboard-avoider.tsx`), que mede quanto da tela o teclado cobre e reserva esse espaço, no Android e no iOS. O conteúdo fica num `ScrollView`, que traz o campo em foco para a área visível. O editor de componente do novo andaime é uma camada sobre a tela, na mesma janela do app, e não um `Modal`: no Android o `Modal` é outra janela, e ali o ajuste do `KeyboardAvoidingView` brigava com o redimensionamento do sistema, fazendo o editor piscar. Os modais de seleção continuam com o `KeyboardAvoidingView` nativo.
 
 ## Acesso de campo (sem e-mail)
 

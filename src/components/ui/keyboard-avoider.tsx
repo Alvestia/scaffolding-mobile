@@ -7,6 +7,7 @@ import {
   View,
   type KeyboardEvent,
   type StyleProp,
+  type ViewProps,
   type ViewStyle,
 } from 'react-native'
 
@@ -30,6 +31,8 @@ export function keyboardOverlap(view: { y: number; height: number }, top: number
 
 type KeyboardAvoiderProps = PropsWithChildren<{
   style?: StyleProp<ViewStyle>
+  /** 'box-none' lets taps on empty areas reach what is behind (e.g. a backdrop). */
+  pointerEvents?: ViewProps['pointerEvents']
 }>
 
 /**
@@ -41,7 +44,7 @@ type KeyboardAvoiderProps = PropsWithChildren<{
  * reserves that space at the bottom. Put a ScrollView inside: when it shrinks,
  * the focused field is brought into view.
  */
-export function KeyboardAvoider({ children, style }: KeyboardAvoiderProps) {
+export function KeyboardAvoider({ children, style, pointerEvents }: KeyboardAvoiderProps) {
   const ref = useRef<View>(null)
   /** Top of the open keyboard; null while it is closed. */
   const openKeyboardTop = useRef<number | null>(null)
@@ -78,6 +81,7 @@ export function KeyboardAvoider({ children, style }: KeyboardAvoiderProps) {
       collapsable={false}
       // The frame also changes with the keyboard open (the tab bar hides): measure again.
       onLayout={measure}
+      pointerEvents={pointerEvents}
       style={[styles.root, style, covered > 0 ? { paddingBottom: covered } : null]}
     >
       {children}

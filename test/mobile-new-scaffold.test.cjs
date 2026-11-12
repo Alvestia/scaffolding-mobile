@@ -103,3 +103,40 @@ test('on Android the screen reserves exactly the space the keyboard covers', () 
   tree.props.onLayout()
   assert.equal(paddingOf(render()), 0, 'no measuring while the keyboard is closed')
 })
+
+test('the component editor is a layer in the app window, closed by the Android back button', () => {
+  const harness = hookHarness()
+  let backHandler
+  let closed = 0
+  const { findElement } = require('./helpers/hook-harness.cjs')
+  const { ComponentDraftModal } = loadSource('components/scaffold/component-draft-modal.tsx', {
+    react: { ...harness.hooks, useCallback: (callback) => callback },
+    'react-native': {
+      ...nativeMock,
+      BackHandler: {
+        addEventListener: (name, callback) => {
+          backHandler = callback
+          return { remove: () => (backHandler = undefined) }
+        },
+      },
+    },
+    'react-dom': { createPortal: () => null },
+    '@expo/vector-icons': { Ionicons: 'Icon' },
+    '@/components/ui/keyboard-avoider': { KeyboardAvoider: 'KeyboardAvoider' },
+    '@/components/ui/selection-modal': { SelectionModal: 'SelectionModal' },
+    '@/hooks/use-scaffold-component-types': {
+      useScaffoldComponentTypes: () => ({ data: [], isLoading: false }),
+    },
+    '@/utils/focus': { blurActiveElement: () => {} },
+  })
+  const props = { visible: true, initialValue: null, onClose: () => closed++, onSave: () => {} }
+
+  const tree = harness.render(ComponentDraftModal, props)
+  const byType = (type) => (element) => element.type === type
+  assert.equal(findElement(tree, byType('Modal')), undefined, 'no separate Android window')
+  assert.ok(findElement(tree, byType('KeyboardAvoider')), 'the keyboard space is reserved')
+
+  assert.equal(backHandler(), true)
+  assert.equal(closed, 1)
+  assert.equal(harness.render(ComponentDraftModal, { ...props, visible: false }), null)
+})

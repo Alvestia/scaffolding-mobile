@@ -2,8 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { createPortal } from 'react-dom'
 import { type ComponentProps, useEffect, useMemo, useState } from 'react'
 import {
-  KeyboardAvoidingView,
-  Modal,
+  BackHandler,
   Platform,
   Pressable,
   ScrollView,
@@ -12,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { KeyboardAvoider } from '@/components/ui/keyboard-avoider'
 import { SelectionModal, type SelectionOption } from '@/components/ui/selection-modal'
 import { colors, radius, spacing } from '@/constants/theme'
 import { useScaffoldComponentTypes } from '@/hooks/use-scaffold-component-types'
@@ -175,132 +175,147 @@ export function ComponentDraftModal({
     onClose()
   }
 
+  // Not a native Modal anymore: the Android back button closes the editor here.
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'android') return
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      blurActiveElement()
+      onClose()
+      return true
+    })
+    return () => subscription.remove()
+  }, [onClose, visible])
+
+  /*
+   * A layer over the screen, in the app window, instead of a native Modal. On
+   * Android a Modal is a separate window: there the keyboard adjustment of
+   * KeyboardAvoidingView and the system resize could fight each other, and the
+   * editor flickered, vanishing and coming back.
+   */
   const content = (
-    <KeyboardAvoidingView
-      style={styles.overlay}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      enabled={Platform.OS !== 'web'}
-    >
+    <View style={styles.overlay}>
       <Pressable style={styles.backdrop} onPress={handleClose} />
-      <View style={styles.sheet}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        >
-          <View style={styles.handle} />
-          <View style={styles.header}>
-            <View style={styles.headerText}>
-              <Text style={styles.title}>
-                {initialValue ? 'Editar componente' : 'Novo componente'}
-              </Text>
-              <Text style={styles.subtitle}>
-                Cada inclusão representa um componente. Tipo e unidade seguem o catálogo.
-              </Text>
-            </View>
-            <Pressable onPress={handleClose} style={styles.closeButton}>
-              <Ionicons name="close" size={16} color={colors.primaryStrong} />
-            </Pressable>
-          </View>
-
-          <Pressable
-            onPress={() => {
-              blurActiveElement()
-              setShowTypePicker(true)
-            }}
-            style={({ pressed }) => [
-              styles.selectTrigger,
-              pressed ? styles.selectTriggerPressed : null,
-            ]}
+      <KeyboardAvoider style={styles.avoider} pointerEvents="box-none">
+        <View style={styles.sheet}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           >
-            <View style={styles.selectTriggerText}>
-              <Text style={styles.fieldLabel}>Tipo do componente</Text>
-              <Text
-                style={[
-                  styles.selectTriggerValue,
-                  !selectedComponentType ? styles.selectTriggerPlaceholder : null,
-                ]}
-              >
-                {selectedComponentType
-                  ? `${selectedComponentType.code} - ${selectedComponentType.name}`
-                  : componentTypesQuery.isLoading
-                    ? 'Carregando catálogo...'
-                    : 'Selecionar tipo'}
-              </Text>
-              <Text style={styles.selectTriggerHelper}>
-                Disponível offline após a preparação do contrato.
-              </Text>
+            <View style={styles.handle} />
+            <View style={styles.header}>
+              <View style={styles.headerText}>
+                <Text style={styles.title}>
+                  {initialValue ? 'Editar componente' : 'Novo componente'}
+                </Text>
+                <Text style={styles.subtitle}>
+                  Cada inclusão representa um componente. Tipo e unidade seguem o catálogo.
+                </Text>
+              </View>
+              <Pressable onPress={handleClose} style={styles.closeButton}>
+                <Ionicons name="close" size={16} color={colors.primaryStrong} />
+              </Pressable>
             </View>
-            <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-          </Pressable>
 
-          <View style={styles.readOnlyField}>
-            <Text style={styles.fieldLabel}>Unidade</Text>
-            <Text style={styles.readOnlyValue}>
-              {selectedComponentType ? getUnitLabel(measurementUnit) : 'Selecione o tipo'}
-            </Text>
-            <Text style={styles.readOnlyHelper}>Definida no cadastro do tipo de componente.</Text>
-          </View>
+            <Pressable
+              onPress={() => {
+                blurActiveElement()
+                setShowTypePicker(true)
+              }}
+              style={({ pressed }) => [
+                styles.selectTrigger,
+                pressed ? styles.selectTriggerPressed : null,
+              ]}
+            >
+              <View style={styles.selectTriggerText}>
+                <Text style={styles.fieldLabel}>Tipo do componente</Text>
+                <Text
+                  style={[
+                    styles.selectTriggerValue,
+                    !selectedComponentType ? styles.selectTriggerPlaceholder : null,
+                  ]}
+                >
+                  {selectedComponentType
+                    ? `${selectedComponentType.code} - ${selectedComponentType.name}`
+                    : componentTypesQuery.isLoading
+                      ? 'Carregando catálogo...'
+                      : 'Selecionar tipo'}
+                </Text>
+                <Text style={styles.selectTriggerHelper}>
+                  Disponível offline após a preparação do contrato.
+                </Text>
+              </View>
+              <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+            </Pressable>
 
-          {selectedComponentType ? (
-            <View style={styles.dimensionsGrid}>
-              {measurementUnit !== 'UNIDADE' ? (
+            <View style={styles.readOnlyField}>
+              <Text style={styles.fieldLabel}>Unidade</Text>
+              <Text style={styles.readOnlyValue}>
+                {selectedComponentType ? getUnitLabel(measurementUnit) : 'Selecione o tipo'}
+              </Text>
+              <Text style={styles.readOnlyHelper}>Definida no cadastro do tipo de componente.</Text>
+            </View>
+
+            {selectedComponentType ? (
+              <View style={styles.dimensionsGrid}>
+                {measurementUnit !== 'UNIDADE' ? (
+                  <CompactInput
+                    label="Altura"
+                    placeholder="0,00"
+                    keyboardType="decimal-pad"
+                    value={height}
+                    onChangeText={setHeight}
+                  />
+                ) : null}
+                {measurementUnit === 'M3' ? (
+                  <CompactInput
+                    label="Largura"
+                    placeholder="0,00"
+                    keyboardType="decimal-pad"
+                    value={width}
+                    onChangeText={setWidth}
+                  />
+                ) : null}
                 <CompactInput
-                  label="Altura"
+                  label="Comprimento"
                   placeholder="0,00"
                   keyboardType="decimal-pad"
-                  value={height}
-                  onChangeText={setHeight}
+                  value={length}
+                  onChangeText={setLength}
                 />
-              ) : null}
-              {measurementUnit === 'M3' ? (
-                <CompactInput
-                  label="Largura"
-                  placeholder="0,00"
-                  keyboardType="decimal-pad"
-                  value={width}
-                  onChangeText={setWidth}
-                />
-              ) : null}
-              <CompactInput
-                label="Comprimento"
-                placeholder="0,00"
-                keyboardType="decimal-pad"
-                value={length}
-                onChangeText={setLength}
-              />
+              </View>
+            ) : null}
+
+            <View style={styles.calculatedBox}>
+              <Text style={styles.calculatedLabel}>{getCalculatedLabel(measurementUnit)}</Text>
+              <Text style={styles.calculatedValue}>
+                {selectedComponentType ? calculatedQuantity : '-'}{' '}
+                {selectedComponentType ? getUnitSuffix(measurementUnit) : ''}
+              </Text>
             </View>
-          ) : null}
 
-          <View style={styles.calculatedBox}>
-            <Text style={styles.calculatedLabel}>{getCalculatedLabel(measurementUnit)}</Text>
-            <Text style={styles.calculatedValue}>
-              {selectedComponentType ? calculatedQuantity : '-'}{' '}
-              {selectedComponentType ? getUnitSuffix(measurementUnit) : ''}
-            </Text>
-          </View>
+            <CompactInput
+              label="Observações"
+              placeholder="Opcional"
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={3}
+            />
 
-          <CompactInput
-            label="Observações"
-            placeholder="Opcional"
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={3}
-          />
+            {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <View style={styles.actions}>
-            <Pressable onPress={handleClose} style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonLabel}>Cancelar</Text>
-            </Pressable>
-            <Pressable onPress={handleSave} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonLabel}>Salvar componente</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </View>
+            <View style={styles.actions}>
+              <Pressable onPress={handleClose} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonLabel}>Cancelar</Text>
+              </Pressable>
+              <Pressable onPress={handleSave} style={styles.primaryButton}>
+                <Text style={styles.primaryButtonLabel}>Salvar componente</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoider>
 
       <SelectionModal
         visible={showTypePicker}
@@ -316,7 +331,7 @@ export function ComponentDraftModal({
             : 'Nenhum tipo de componente disponível no cache deste aparelho.'
         }
       />
-    </KeyboardAvoidingView>
+    </View>
   )
 
   if (!visible) return null
@@ -326,18 +341,14 @@ export function ComponentDraftModal({
     return createPortal(content, document.body)
   }
 
-  return (
-    <Modal visible animationType="slide" transparent onRequestClose={handleClose}>
-      {content}
-    </Modal>
-  )
+  return content
 }
 
 const styles = StyleSheet.create({
   overlay: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: spacing.lg,
+    ...StyleSheet.absoluteFill,
+    zIndex: 1000,
+    elevation: 1000,
     ...Platform.select({
       web: {
         position: 'fixed',
@@ -349,6 +360,10 @@ const styles = StyleSheet.create({
       },
       default: null,
     }),
+  },
+  avoider: {
+    justifyContent: 'center',
+    padding: spacing.lg,
   },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(8, 20, 26, 0.42)' },
   sheet: {
