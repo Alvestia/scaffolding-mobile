@@ -17,6 +17,7 @@ Aplicativo Expo/React Native para operação de campo do Scaffold, alinhado à A
 - execução em duas etapas: apontamento e finalização;
 - avanço individual por componente e ajustes de metragem no andaime/componente;
 - manutenção de membros da equipe;
+- aba "Meu dia": os andaimes em que a pessoa logada lançou execução, por dia da semana, com navegação por semana e mês;
 - cadastro de andaime em campo (aba "Novo"), planejado ou emergencial conforme a OM/OS, seguindo direto para o lançamento da montagem;
 - evidências locais e upload idempotente;
 - sincronização automática e manual com retentativa;
@@ -59,6 +60,15 @@ A aba **Novo** cadastra o andaime em campo.
 
 - **Origem.** A OM/OS decide: com ela, o andaime é planejado; sem ela, emergencial. A regra final é da API (`resolveFieldScaffoldOrigin`, em `scaffolding-api/src/scaffolds/scaffolds.service.ts`), que reconhece os cadastros do app pelo `mobileLocalId`. Nos contratos com módulo de projetos, o andaime criado no app é sempre emergencial, porque um planejado ficaria bloqueado até a aprovação do projeto.
 - **Depois de salvar.** O app abre direto o lançamento da montagem do andaime, sem perguntar, online ou offline. A fila filtrada nesse andaime fica por baixo, então "voltar" cai nas atividades dele. Sem serviço de montagem, ou ao criar vários andaimes de uma vez, abre a fila.
+
+## Meu dia
+
+A aba **Meu dia** mostra o que a pessoa logada lançou, dia a dia, no contrato selecionado. Abre no dia atual; a faixa SEG a DOM mostra quantos lançamentos houve em cada dia, as setas trocam de semana e o calendário (ícone ou nome do mês) salta para qualquer dia passado.
+
+- **Fonte.** `GET /execution-entries/mine` (API), que devolve só os lançamentos da própria pessoa (`executedById`), exige `execution:create` e aceita no máximo 45 dias. Lançamentos cancelados não aparecem. A aba fica oculta para perfis sem `execution:create`.
+- **Pendentes.** Os lançamentos ainda no aparelho entram na lista como "Aguardando envio" ou "Erro no envio"; tocar neles abre Pendências. Quando o envio termina, a cópia do servidor substitui a do aparelho (mesmo `clientMutationId`).
+- **Offline.** As últimas 8 semanas/meses vistos ficam guardados no aparelho e são mostrados sem conexão, com aviso da hora em que foram carregados.
+- **Dia.** O dia de cada lançamento é o do início, no relógio do aparelho. A API é consultada com um dia de folga de cada lado, porque ela corta os dias no horário de São Paulo.
 
 ## Teclado
 

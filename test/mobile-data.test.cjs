@@ -113,6 +113,7 @@ test('updating the base invalidates queue and catalog screens without clearing u
   const client = new QueryClient()
   const prefixes = [
     'execution-queue',
+    'my-day',
     'areas',
     'projects',
     'work-orders',

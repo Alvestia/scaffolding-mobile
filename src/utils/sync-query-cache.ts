@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query'
 
 const SYNCED_QUERIES = new Set([
   'execution-queue',
+  'my-day',
   'queue-service-detail',
   'latest-scaffold',
   'crews',

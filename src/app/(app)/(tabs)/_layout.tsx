@@ -8,6 +8,9 @@ import { hasPermission } from '@/utils/inspection-rules'
 export default function TabsLayout() {
   const insets = useSafeAreaInsets()
   const canSeeInspections = useAuthStore((state) => hasPermission(state.user, 'inspection:view'))
+  const canRecordExecutions = useAuthStore((state) =>
+    hasPermission(state.user, 'execution:create'),
+  )
 
   return (
     <Tabs
@@ -45,6 +48,17 @@ export default function TabsLayout() {
           title: 'Fila',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="list-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="my-day"
+        options={{
+          title: 'Meu dia',
+          // Only for profiles that record executions.
+          href: canRecordExecutions ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar-outline" size={size} color={color} />
           ),
         }}
       />
