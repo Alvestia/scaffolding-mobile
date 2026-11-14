@@ -5,6 +5,7 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker'
 import { router } from 'expo-router'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ShiftField } from '@/components/shift/shift-field'
 import {
   Alert,
   Modal,
@@ -173,6 +174,9 @@ export default function DeviationsPage() {
   const [rosterExpanded, setRosterExpanded] = useState(true)
   const lastCrewRef = useRef<string | null>(null)
   const [notes, setNotes] = useState('')
+  const [shiftId, setShiftId] = useState<string | null>(null)
+  // Remounts the shift field after a save, so it suggests again.
+  const [shiftFieldKey, setShiftFieldKey] = useState(0)
   const [evidences, setEvidences] = useState<DeviationEvidenceDraft[]>([])
   const [evidenceCaption, setEvidenceCaption] = useState('')
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -437,6 +441,8 @@ export default function DeviationsPage() {
     setSelectedMemberIds([])
     setFunctionQuantities([])
     setNotes('')
+    setShiftId(null)
+    setShiftFieldKey((current) => current + 1)
     setEvidences([])
     setEvidenceCaption('')
   }
@@ -481,6 +487,7 @@ export default function DeviationsPage() {
       companyId,
       unitId,
       contractId,
+      shiftId,
       notes: notes.trim() || undefined,
     }
 
@@ -837,6 +844,16 @@ export default function DeviationsPage() {
                       </Pressable>
                     </View>
                   </View>
+
+                  <ShiftField
+                    key={shiftFieldKey}
+                    contractId={contractId}
+                    unitId={unitId}
+                    isConnected={isConnected}
+                    startTime={occurredTime}
+                    value={shiftId}
+                    onChange={setShiftId}
+                  />
 
                   <View style={styles.requiredNotice}>
                     <Ionicons name="time-outline" size={16} color={colors.primaryStrong} />

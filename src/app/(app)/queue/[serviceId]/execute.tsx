@@ -4,6 +4,7 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { ShiftField } from '@/components/shift/shift-field'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import {
   ActivityIndicator,
@@ -267,6 +268,8 @@ export default function ExecuteServicePage() {
   const [endDate, setEndDate] = useState(formatDate(new Date()))
   const [endTime, setEndTime] = useState(formatTime(new Date()))
   const [notes, setNotes] = useState('')
+  const [shiftId, setShiftId] = useState<string | null>(null)
+  const [shiftChosen, setShiftChosen] = useState(false)
   const [laborMode, setLaborMode] = useState<ExecutionLaborMode>('UNASSIGNED')
   const [selectedCrewId, setSelectedCrewId] = useState('')
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
@@ -554,6 +557,10 @@ export default function ExecuteServicePage() {
       setEndDate(hydratedEnd.date)
       setEndTime(hydratedEnd.time)
       setNotes(payload.notes ?? '')
+      if (payload.shiftId !== undefined) {
+        setShiftId(payload.shiftId)
+        setShiftChosen(true)
+      }
       setLaborMode(payload.laborMode ?? (payload.crewId ? 'CREW' : 'UNASSIGNED'))
       setSelectedCrewId(payload.crewId ?? '')
       setSelectedMemberIds(payload.memberEmployeeIds ?? [])
@@ -833,6 +840,7 @@ export default function ExecuteServicePage() {
         startTime: toIsoFromDateTime(startDate, startTime),
         endTime: toIsoFromDateTime(endDate, endTime),
         notes: notes.trim() || undefined,
+        shiftId,
         laborMode,
         crewId: laborMode === 'CREW' ? selectedCrewId : undefined,
         memberEmployeeIds:
@@ -1428,6 +1436,15 @@ export default function ExecuteServicePage() {
                           </Pressable>
                         </View>
                       </View>
+                      <ShiftField
+                        contractId={contractId}
+                        unitId={unitId}
+                        isConnected={isConnected}
+                        startTime={startTime}
+                        value={shiftId}
+                        onChange={setShiftId}
+                        chosen={shiftChosen}
+                      />
                     </FormSection>
 
                     {submitError ? (

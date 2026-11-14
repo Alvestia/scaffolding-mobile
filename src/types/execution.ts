@@ -71,6 +71,8 @@ export type CreateExecutionEntryDto = {
   startTime: string
   endTime: string
   notes?: string
+  /** Work shift; absent: the API suggests it from the start (older drafts). */
+  shiftId?: string | null
   crewId?: string
   laborMode?: ExecutionLaborMode
   functionQuantities?: ExecutionFunctionQuantityInput[]
