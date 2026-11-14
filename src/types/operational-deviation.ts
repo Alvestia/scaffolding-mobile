@@ -61,6 +61,8 @@ export type CreateOperationalDeviationDto = {
   responsibility: DeviationResponsibility
   ocurredAt: string
   resolvedAt: string
+  /** Work shift; absent: the API suggests it from the start. */
+  shiftId?: string | null
   memberEmployeeIds?: string[]
   functionQuantities?: {
     workFunctionId: string

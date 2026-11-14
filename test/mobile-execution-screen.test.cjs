@@ -26,6 +26,7 @@ function executionScreen() {
     '@/services/employees.service': {}, '@/services/work-functions.service': {},
     '@/utils/id': {}, '@/utils/focus': {},
     '@/components/inspection/scaffold-availability-warning': { ScaffoldAvailabilityWarning: () => null },
+    '@/components/shift/shift-field': { ShiftField: () => null },
   }
   for (const [file, name] of [
     ['ui/banner', 'Banner'], ['ui/empty-state', 'EmptyState'], ['ui/segmented-control', 'SegmentedControl'],
