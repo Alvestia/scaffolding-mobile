@@ -1,3 +1,5 @@
+import { useScaffoldGeolocation } from '@/hooks/use-scaffold-geolocation'
+import { ScaffoldGeolocationCard } from '@/components/scaffold/scaffold-geolocation-card'
 import { Ionicons } from '@expo/vector-icons'
 import DateTimePicker, {
   DateTimePickerAndroid,
@@ -247,6 +249,8 @@ export default function ExecuteServicePage() {
 
   const serviceQuery = useQueueServiceDetail(serviceId ?? null, { contractId, unitId }, isConnected)
   const service = serviceQuery.isError ? undefined : serviceQuery.data
+  const geolocation = useScaffoldGeolocation(`${unitId}:${contractId}:${serviceId}:${draftLocalId ?? 'new'}`, service?.scaffold)
+  const setGeolocationDraft = geolocation.setDraft
   const scope =
     contractId && unitId
       ? {
@@ -540,6 +544,7 @@ export default function ExecuteServicePage() {
       }
 
       const payload = normalizedPayload.entry
+      setGeolocationDraft(payload.scaffoldGeolocation)
       setDraftBasis(normalizedPayload.basisSnapshot ?? { version: payload.expectedBasisVersion ?? 0, quantity: null, unit: '' })
       const isPercentual = payload.inputType === ExecutionInputType.PERCENTUAL
       const hydratedStart = getDateTimeFieldsFromIso(payload.startTime)
@@ -584,7 +589,7 @@ export default function ExecuteServicePage() {
     return () => {
       active = false
     }
-  }, [draftLocalId])
+  }, [draftLocalId, setGeolocationDraft])
 
   const calculatedDimensionsValue = useMemo(() => {
     if (!service) {
@@ -795,7 +800,7 @@ export default function ExecuteServicePage() {
 
   const handleSubmit = async () => {
     if (basisChanged || !draftBasis) { setSubmitError('A base foi revisada. Confira os valores e escolha como tratar este rascunho.'); return }
-    if (isSubmitting) {
+    if (isSubmitting || geolocation.busy) {
       return
     }
 
@@ -832,6 +837,7 @@ export default function ExecuteServicePage() {
 
       const localId = draftLocalId ?? createLocalId('execution')
       const entryPayload: CreateExecutionEntryDto = {
+        scaffoldGeolocation: service.type === 'MONTAGEM' ? geolocation.value : undefined,
         scaffoldServiceId: service.id,
         expectedBasisVersion: service.quantityVersion ?? 0,
         operationType: service.type,
@@ -1547,6 +1553,8 @@ export default function ExecuteServicePage() {
                       />
                     ) : null}
 
+                    {service.type === 'MONTAGEM' && <ScaffoldGeolocationCard location={geolocation} disabled={isSubmitting} />}
+
                     <View style={styles.finalActions}>
                       <Pressable
                         onPress={() => {
@@ -1573,7 +1581,7 @@ export default function ExecuteServicePage() {
                             ? styles.submitButtonPressed
                             : null,
                         ]}
-                        disabled={serviceQuery.isLoading || isSubmitting}
+                        disabled={serviceQuery.isLoading || isSubmitting || geolocation.busy}
                       >
                         <Text style={styles.submitButtonLabel}>
                           {serviceQuery.isLoading || isSubmitting

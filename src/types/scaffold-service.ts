@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-redeclare */
+import type { ScaffoldLocationFields } from './scaffold-geolocation'
 export const ScaffoldServiceStatus = {
   NAO_INICIADO: 'NAO_INICIADO',
   EM_EXECUCAO: 'EM_EXECUCAO',
@@ -41,7 +42,7 @@ export type QueueServiceItem = {
   description?: string | null
   startForecast?: string | null
   endForecast?: string | null
-  scaffold?: {
+  scaffold?: ScaffoldLocationFields & {
     id: string
     code: string
     areaId?: string | null

@@ -23,6 +23,8 @@ function executionScreen() {
     '@/hooks/use-queue-service-detail': { useQueueServiceDetail: () => ({ ...query, refetch: async () => retries++ }) },
     '@/hooks/use-crews': { useCrews: () => ({ data: [] }) },
     '@/hooks/use-scaffold-components': { useScaffoldComponents: () => ({ data: [] }) },
+    '@/hooks/use-scaffold-geolocation': { useScaffoldGeolocation: () => ({ busy: false, setDraft: () => {} }) },
+    '@/components/scaffold/scaffold-geolocation-card': { ScaffoldGeolocationCard: () => null },
     '@/services/employees.service': {}, '@/services/work-functions.service': {},
     '@/utils/id': {}, '@/utils/focus': {},
     '@/components/inspection/scaffold-availability-warning': { ScaffoldAvailabilityWarning: () => null },
