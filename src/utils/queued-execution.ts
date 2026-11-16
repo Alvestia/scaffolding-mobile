@@ -61,6 +61,7 @@ function normalizeEntry(value: object): CreateExecutionEntryDto {
 
   return {
     clientMutationId: entry.clientMutationId,
+    scaffoldGeolocation: entry.scaffoldGeolocation,
     expectedBasisVersion: entry.expectedBasisVersion,
     scaffoldServiceId: entry.scaffoldServiceId ?? '',
     operationType: entry.operationType!,

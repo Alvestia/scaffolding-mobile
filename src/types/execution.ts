@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-redeclare */
+import type { ScaffoldGeolocation } from './scaffold-geolocation'
 export const ExecutionOperationType = {
   MONTAGEM: 'MONTAGEM',
   DESMONTAGEM: 'DESMONTAGEM',
@@ -62,6 +63,7 @@ export type ExecutionDraft = {
 }
 
 export type CreateExecutionEntryDto = {
+  scaffoldGeolocation?: ScaffoldGeolocation
   expectedBasisVersion?: number
   clientMutationId?: string
   scaffoldServiceId: string
@@ -115,6 +117,7 @@ export type EmergencyScaffoldComponentDraft = {
 }
 
 export type EmergencyScaffoldDraft = {
+  geolocation?: ScaffoldGeolocation
   localId: string
   mobileLocalId?: string
   code?: string

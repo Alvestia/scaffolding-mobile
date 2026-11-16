@@ -165,6 +165,7 @@ export async function createEmergencyScaffold(draft: EmergencyScaffoldDraft, mut
       scaffoldTypeId: draft.scaffoldTypeId,
       description: draft.description,
       location: draft.location,
+      geolocation: draft.geolocation,
       measurementUnit: draft.measurementUnit === 'LINEAR_M' ? 'UNIDADE' : draft.measurementUnit,
       height: draft.height,
       width: draft.width,

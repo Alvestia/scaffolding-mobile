@@ -1,3 +1,5 @@
+import { useScaffoldGeolocation } from '@/hooks/use-scaffold-geolocation'
+import { ScaffoldGeolocationCard } from '@/components/scaffold/scaffold-geolocation-card'
 import { Ionicons } from '@expo/vector-icons'
 import DateTimePicker, {
   DateTimePickerAndroid,
@@ -284,8 +286,11 @@ export default function EmergencyPage() {
   const [editingComponentIndex, setEditingComponentIndex] = useState<number | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const geolocation = useScaffoldGeolocation(`${unitId}:${contractId}:emergency`)
+  const resetGeolocation = geolocation.reset
 
   const resetEmergencyForm = useCallback(() => {
+    resetGeolocation()
     setActivePicker(null)
     setCodeMode('auto')
     setScaffoldTypeId('')
@@ -311,7 +316,7 @@ export default function EmergencyPage() {
     setComponentModalVisible(false)
     setEditingComponentIndex(null)
     setSubmitError(null)
-  }, [])
+  }, [resetGeolocation])
 
   const scope =
     contractId && unitId
@@ -623,7 +628,7 @@ export default function EmergencyPage() {
   }
 
   const handleSubmit = async () => {
-    if (isSubmitting) {
+    if (isSubmitting || geolocation.busy) {
       return
     }
 
@@ -697,6 +702,7 @@ export default function EmergencyPage() {
         areaId: areaId || undefined,
         description: description.trim() || undefined,
         location: location.trim() || undefined,
+        geolocation: geolocation.value,
         measurementUnit,
         height: normalizedDimensions.height,
         width: normalizedDimensions.width,
@@ -1268,6 +1274,7 @@ export default function EmergencyPage() {
                   </View>
                 </Section>
 
+                <ScaffoldGeolocationCard location={geolocation} disabled={isSubmitting} />
                 {submitError ? (
                   <Banner tone="danger" title="Não foi possível salvar" description={submitError} />
                 ) : null}
@@ -1279,7 +1286,7 @@ export default function EmergencyPage() {
                     isSubmitting ? styles.primaryButtonDisabled : null,
                     pressed && !isSubmitting ? styles.primaryButtonPressed : null,
                   ]}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || geolocation.busy}
                 >
                   <Text style={styles.primaryButtonLabel}>
                     {isSubmitting ? 'Cadastrando...' : 'Cadastrar andaime'}
