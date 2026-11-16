@@ -1,4 +1,5 @@
 import { Platform } from 'react-native'
+import { runStartupStep } from '@/services/startup-diagnostics'
 
 type SQLiteModule = typeof import('expo-sqlite')
 type SQLiteDatabase = Awaited<ReturnType<SQLiteModule['openDatabaseAsync']>>
@@ -12,15 +13,19 @@ export async function getDatabase() {
   }
 
   if (!databasePromise) {
-    databasePromise = import('expo-sqlite')
-      .then((SQLite) => SQLite.openDatabaseAsync('scaffolding-mobile.db'))
+    databasePromise = runStartupStep('sqlite_module', () => import('expo-sqlite'))
+      .then((SQLite) =>
+        runStartupStep('sqlite_open', () => SQLite.openDatabaseAsync('scaffolding-mobile.db')),
+      )
       .then(async (db) => {
         try {
-          await db.execAsync(`
+          await runStartupStep('sqlite_configure', () =>
+            db.execAsync(`
           PRAGMA journal_mode = WAL;
           PRAGMA synchronous = NORMAL;
           PRAGMA busy_timeout = 5000;
-        `)
+        `),
+          )
 
           return db
         } catch (error) {

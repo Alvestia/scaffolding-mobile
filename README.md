@@ -195,6 +195,11 @@ suportados. Não é necessário pagar um plano para compilar na própria máquin
 
 Para a Google Play, o perfil `production` continua gerando AAB:
 
+O prebuild habilita R8 (ofuscação/otimização), redução de recursos e orientação
+adaptável no Android. Antes de gerar a próxima versão, execute
+`npm run check:android-release`. Os detalhes e a validação do pacote final estão
+em [Qualidade do release Android](ANDROID_RELEASE_QUALITY.md).
+
 ```bash
 eas build --platform android --profile production --local --output ./scaffold-mobile.aab
 ```

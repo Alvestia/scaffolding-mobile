@@ -1,26 +1,36 @@
 const assert = require('node:assert/strict')
 const { test } = require('node:test')
 const { DatabaseSync } = require('node:sqlite')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const { loadSource } = require('./helpers/load-source.cjs')
 
 test('SQLite outbox preserves accepted/syncing records and never recreates a vanished draft', async () => {
-  const sql = new DatabaseSync(':memory:')
-  const db = {
-    execAsync: async (query) => sql.exec(query),
-    getFirstAsync: async (query, params = []) => sql.prepare(query).get(...params),
-    getAllAsync: async (query, params = []) => sql.prepare(query).all(...params),
-    runAsync: async (query, params = []) => sql.prepare(query).run(...params),
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'scaffold-sqlite-startup-'))
+  const databasePath = path.join(directory, 'test.db')
+  const sql = new DatabaseSync(databasePath)
+  const adapt = (connection) => ({
+    execAsync: async (query) => connection.exec(query),
+    getFirstAsync: async (query, params = []) => connection.prepare(query).get(...params),
+    getAllAsync: async (query, params = []) => connection.prepare(query).all(...params),
+    runAsync: async (query, params = []) => connection.prepare(query).run(...params),
     withExclusiveTransactionAsync: async (fn) => {
-      sql.exec('BEGIN')
+      // Expo opens a separate connection for exclusive transactions, including migrations.
+      const transaction = new DatabaseSync(databasePath)
       try {
-        await fn(db)
-        sql.exec('COMMIT')
+        transaction.exec('BEGIN')
+        await fn(adapt(transaction))
+        transaction.exec('COMMIT')
       } catch (error) {
-        sql.exec('ROLLBACK')
+        transaction.exec('ROLLBACK')
         throw error
+      } finally {
+        transaction.close()
       }
     },
-  }
+  })
+  const db = adapt(sql)
   let queue = Promise.resolve()
   const native = {
     getDatabase: async () => db,
@@ -43,7 +53,9 @@ test('SQLite outbox preserves accepted/syncing records and never recreates a van
     },
   }
   try {
-    await loadSource('database/migrations.ts', mocks).initializeDatabase()
+    const { initializeDatabase } = loadSource('database/migrations.ts', mocks)
+    await initializeDatabase()
+    assert.equal(sql.prepare('PRAGMA user_version').get().user_version, 3)
     const { outboxRepository: repo } = loadSource(
       'database/repositories/outbox-repository.ts',
       mocks,
@@ -58,6 +70,8 @@ test('SQLite outbox preserves accepted/syncing records and never recreates a van
     }
     await repo.enqueue(item)
     const original = sql.prepare('SELECT * FROM outbox_items').get()
+    await initializeDatabase()
+    assert.deepEqual(sql.prepare('SELECT * FROM outbox_items').get(), original)
     sql.prepare("UPDATE outbox_items SET remote_id = 'accepted', sync_status = 'failed'").run()
     await assert.rejects(
       repo.enqueue({ ...item, payload: { notes: 'edited' } }, { requireExisting: true }),
@@ -77,5 +91,6 @@ test('SQLite outbox preserves accepted/syncing records and never recreates a van
     assert.equal(sql.prepare('SELECT count(*) AS count FROM outbox_items').get().count, 0)
   } finally {
     sql.close()
+    fs.rmSync(directory, { recursive: true, force: true })
   }
 })

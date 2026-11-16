@@ -163,7 +163,7 @@ test('native database opening retries after failure instead of caching a rejecte
       },
     },
   })
-  await assert.rejects(client.getDatabase(), /busy/)
+  await assert.rejects(client.getDatabase(), (error) => error.cause?.message === 'busy')
   assert.equal(await client.getDatabase(), database)
   assert.equal(opens, 2)
 })

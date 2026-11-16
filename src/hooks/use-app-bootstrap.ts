@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { initializeDatabase } from '@/database/migrations'
 import { useAuthStore } from '@/store/auth-store'
+import { getStartupDiagnostic, runStartupStep } from '@/services/startup-diagnostics'
 
 export function useAppBootstrap() {
   const hydrate = useAuthStore((state) => state.hydrate)
@@ -20,18 +21,24 @@ export function useAppBootstrap() {
     async function bootstrap() {
       let databaseOpened = false
       try {
-        await initializeDatabase()
+        await runStartupStep('sqlite_schema', initializeDatabase)
         databaseOpened = true
         if (cancelled) return
-        await hydrate()
+        await runStartupStep('session', hydrate)
         if (cancelled) return
         setIsDatabaseReady(true)
-      } catch {
+      } catch (cause) {
         if (!cancelled) {
+          const diagnostic = getStartupDiagnostic(
+            cause,
+            databaseOpened ? 'session' : 'sqlite_schema',
+          )
+          console.error('[bootstrap]', JSON.stringify(diagnostic))
           // Com o banco aberto, a falha veio da sessão salva: descartá-la libera o login.
           setCanResetSession(databaseOpened)
           setError(
-            'Não foi possível abrir os dados deste aparelho. Tente novamente. Seus registros locais serão preservados.',
+            'Não foi possível abrir os dados deste aparelho. Tente novamente. Seus registros locais serão preservados.' +
+              `\nReferência para suporte: ${diagnostic.reference}`,
           )
         }
       }

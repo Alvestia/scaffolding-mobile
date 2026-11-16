@@ -90,7 +90,8 @@
           "isAndroidForegroundServiceEnabled": false
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/with-android-release"
     ],
     "experiments": {
       "typedRoutes": true,
