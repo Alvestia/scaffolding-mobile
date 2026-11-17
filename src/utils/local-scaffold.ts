@@ -1,5 +1,6 @@
 import type { LocalScaffoldService } from '@/types/local-scaffold'
 import type { QueueServiceItem } from '@/types/scaffold-service'
+import type { ScaffoldGeolocation } from '@/types/scaffold-geolocation'
 
 /**
  * Converte um serviço local (offline) para o formato QueueServiceItem,
@@ -8,7 +9,10 @@ import type { QueueServiceItem } from '@/types/scaffold-service'
  * O campo `id` do item retornado é o `localId` do serviço local (ex: "svc_<uuid>").
  * O sync-engine resolve esse ID para o ID remoto real no momento da sincronização.
  */
-export function localServiceToQueueItem(service: LocalScaffoldService): QueueServiceItem {
+export function localServiceToQueueItem(
+  service: LocalScaffoldService,
+  location?: ScaffoldGeolocation,
+): QueueServiceItem {
   return {
     id: service.localId,
     scaffoldId: service.localScaffoldId,
@@ -23,6 +27,14 @@ export function localServiceToQueueItem(service: LocalScaffoldService): QueueSer
     startForecast: null,
     endForecast: null,
     scaffold: {
+      ...(location
+        ? {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            locationAccuracyMeters: location.accuracyMeters,
+            locationCapturedAt: location.capturedAt,
+          }
+        : {}),
       id: service.localScaffoldId,
       code: service.scaffoldCode ?? 'Andaime offline',
       description: service.scaffoldDescription ?? null,

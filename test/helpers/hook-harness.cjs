@@ -30,6 +30,9 @@ exports.hookHarness = function hookHarness() {
     useMemo(factory) {
       return factory()
     },
+    useCallback(callback) {
+      return callback
+    },
     useEffect(callback, deps) {
       const index = cursor++
       const previous = cells[index]

@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import type { OperationalContext, TeamMember } from '@/types/operational-context'
 import { createJSONStorage, persist } from '@/utils/zustand-middleware'
 import { nowIso } from '@/utils/date'
+import { copyEntryDefaults, type EntryDefaults } from '@/types/entry-defaults'
 
 type OperationalContextState = OperationalContext & {
   ownerTenantId: string | null
@@ -26,6 +27,7 @@ type OperationalContextState = OperationalContext & {
     teamMembers: TeamMember[]
   }) => void
   setTeamMembers: (teamMembers: TeamMember[]) => void
+  setEntryDefaults: (defaults: EntryDefaults | null) => void
   reset: () => void
   activateOwner: (user: { id: string; tenantId: string }) => void
   clearOwner: () => void
@@ -46,6 +48,7 @@ const initialState: OperationalContext = {
   crewName: null,
   crewForemanName: null,
   teamMembers: [],
+  entryDefaults: null,
   lastUpdatedAt: null,
 }
 
@@ -67,7 +70,7 @@ export const useOperationalContextStore = create<OperationalContextState>()(
         contractClientName,
         contractPlantName,
       }) =>
-        set({
+        set((state) => ({
           companyId,
           companyName: companyName ?? null,
           unitId,
@@ -78,10 +81,17 @@ export const useOperationalContextStore = create<OperationalContextState>()(
           contractDescription: contractDescription ?? null,
           contractClientName: contractClientName ?? null,
           contractPlantName: contractPlantName ?? null,
+          entryDefaults:
+            state.contractId === contractId && state.unitId === unitId ? state.entryDefaults : null,
           crewId: null,
           crewName: null,
           crewForemanName: null,
           teamMembers: [],
+          lastUpdatedAt: nowIso(),
+        })),
+      setEntryDefaults: (defaults) =>
+        set({
+          entryDefaults: defaults ? copyEntryDefaults(defaults) : null,
           lastUpdatedAt: nowIso(),
         }),
       setCrew: ({ crewId, crewName, crewForemanName, teamMembers }) =>
@@ -105,10 +115,7 @@ export const useOperationalContextStore = create<OperationalContextState>()(
         })),
       activateOwner: (user) =>
         set((state) => {
-          if (
-            state.ownerTenantId === user.tenantId &&
-            state.ownerUserId === user.id
-          ) {
+          if (state.ownerTenantId === user.tenantId && state.ownerUserId === user.id) {
             return state
           }
 
@@ -127,7 +134,7 @@ export const useOperationalContextStore = create<OperationalContextState>()(
     }),
     {
       name: 'scaffold_mobile_operational_context',
-      version: 3,
+      version: 4,
       migrate: (persistedState, persistedVersion) => {
         const state = persistedState as Partial<OperationalContextState> | undefined
 
@@ -146,6 +153,7 @@ export const useOperationalContextStore = create<OperationalContextState>()(
           crewName: state?.crewName ?? null,
           crewForemanName: state?.crewForemanName ?? null,
           teamMembers: state?.teamMembers ?? [],
+          entryDefaults: persistedVersion < 4 ? null : (state?.entryDefaults ?? null),
           ownerTenantId: state?.ownerTenantId ?? null,
           ownerUserId: state?.ownerUserId ?? null,
         }

@@ -1,4 +1,6 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
+import { Button } from '@/components/ui/button'
+import { colors, radius, spacing } from '@/constants/theme'
 import type { useScaffoldGeolocation } from '@/hooks/use-scaffold-geolocation'
 
 export function ScaffoldGeolocationCard({
@@ -12,15 +14,17 @@ export function ScaffoldGeolocationCard({
     <View style={styles.card}>
       <Text style={styles.title}>Localização do andaime</Text>
       {location.hasLocation ? (
-        <Text>Este andaime já tem uma posição registrada. Ela será preservada.</Text>
+        <Text style={styles.description}>
+          Este andaime já tem uma posição registrada. Ela será preservada.
+        </Text>
       ) : (
         <>
-          <Text>
-            GPS opcional. Capture a posição junto ao andaime. Ela será enviada com este registro,
-            mesmo se você estiver offline.
+          <Text style={styles.description}>
+            Capture o GPS junto ao andaime para salvar. A posição será enviada com o registro, mesmo
+            quando a captura for feita offline.
           </Text>
           {location.value && (
-            <Text>
+            <Text style={styles.description}>
               {location.value.latitude.toFixed(6)}, {location.value.longitude.toFixed(6)}
               {location.value.accuracyMeters != null
                 ? ` · Precisão estimada: ${location.value.accuracyMeters} m`
@@ -32,25 +36,18 @@ export function ScaffoldGeolocationCard({
               {location.error}
             </Text>
           )}
-          <Pressable
-            accessibilityRole="button"
+          <Button
             disabled={disabled || location.busy}
+            loading={location.busy}
             onPress={() => void location.capture()}
-            style={styles.button}
           >
-            <Text style={styles.buttonLabel}>
-              {location.busy
-                ? 'Obtendo GPS…'
-                : location.value
-                  ? 'Capturar novamente'
-                  : 'Capturar GPS'}
+            {location.value ? 'Capturar novamente' : 'Capturar GPS'}
+          </Button>
+          {location.busy ? (
+            <Text accessibilityRole="alert" style={styles.description}>
+              Obtendo GPS…
             </Text>
-          </Pressable>
-          {(location.value || location.busy || location.error) && (
-            <Pressable accessibilityRole="button" disabled={disabled} onPress={location.reset}>
-              <Text style={styles.link}>Continuar sem GPS</Text>
-            </Pressable>
-          )}
+          ) : null}
         </>
       )}
     </View>
@@ -59,16 +56,14 @@ export function ScaffoldGeolocationCard({
 
 const styles = StyleSheet.create({
   card: {
-    padding: 16,
-    gap: 10,
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
+    padding: spacing.md,
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: colors.border,
   },
-  title: { fontWeight: '700', fontSize: 16, color: '#0f172a' },
-  button: { padding: 12, borderRadius: 8, backgroundColor: '#1d4ed8', alignItems: 'center' },
-  buttonLabel: { color: 'white', fontWeight: '600' },
-  link: { color: '#1d4ed8', paddingVertical: 6 },
-  error: { color: '#b91c1c' },
+  title: { fontWeight: '600', fontSize: 14, color: colors.text },
+  description: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
+  error: { color: colors.danger, fontSize: 13 },
 })

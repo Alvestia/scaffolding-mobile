@@ -70,7 +70,7 @@ export function useExecutionQueue(scope: Scope, filters?: QueueServiceFilters) {
               statuses: [...new Set(['NAO_INICIADO', 'EM_EXECUCAO', ...(filters?.statuses ?? [])])],
             }
           : filters
-      const localItems = localServices.map(localServiceToQueueItem)
+      const localItems = localServices.map((service) => localServiceToQueueItem(service))
 
       const applyPendingExecutions = (items: QueueServiceItem[]): QueueServiceItem[] =>
         items.reduce<QueueServiceItem[]>((acc, item) => {

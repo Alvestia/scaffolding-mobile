@@ -2,6 +2,7 @@ import { queueCacheRepository } from '@/database/repositories/queue-cache-reposi
 import { syncStateRepository } from '@/database/repositories/sync-state-repository'
 import { fetchAreas } from '@/services/areas.service'
 import { fetchCrews } from '@/services/crews.service'
+import { fetchContractShifts } from '@/services/contract-shifts.service'
 import { fetchDeviationTypes } from '@/services/deviation-types.service'
 import { fetchEmployees } from '@/services/employees.service'
 import { fetchProjects } from '@/services/projects.service'
@@ -130,6 +131,7 @@ export async function runManualSync(
       fetchDeviationTypes(),
       fetchProjects(scope),
       fetchWorkFunctions(scope),
+      fetchContractShifts(scope),
       fetchAreas({
         companyId: scope.companyId ?? null,
         unitId: scope.unitId,

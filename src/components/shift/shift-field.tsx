@@ -1,8 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { SelectField } from '@/components/ui/select-field'
 import { SelectionModal } from '@/components/ui/selection-modal'
-import { fetchContractShifts, getCachedContractShifts } from '@/services/contract-shifts.service'
+import { useContractShifts } from '@/hooks/use-contract-shifts'
 import { suggestShiftId } from '@/utils/shift-time'
 
 const NONE = '__none__'
@@ -19,7 +18,8 @@ export function ShiftField({
   startTime,
   value,
   onChange,
-  chosen: chosenFromDraft = false,
+  chosen: controlledChosen,
+  onChosen,
 }: {
   contractId: string | null
   unitId: string | null
@@ -28,33 +28,24 @@ export function ShiftField({
   startTime: string
   value: string | null
   onChange: (shiftId: string | null) => void
-  /** A draft reopened with a shift already chosen. */
+  /** A choice from this form, a reopened draft or the Home defaults. */
   chosen?: boolean
+  onChosen?: () => void
 }) {
   const [open, setOpen] = useState(false)
-  const [chosen, setChosen] = useState(chosenFromDraft)
-  const shiftsQuery = useQuery({
-    queryKey: ['contract-shifts', contractId, unitId, isConnected],
-    enabled: Boolean(contractId && unitId),
-    queryFn: async () => {
-      if (!contractId || !unitId) return []
-      const scope = { contractId, unitId }
-      if (!isConnected) return getCachedContractShifts(scope)
-      try {
-        return await fetchContractShifts(scope)
-      } catch (error) {
-        const cached = await getCachedContractShifts(scope)
-        if (cached.length > 0) return cached
-        throw error
-      }
-    },
-  })
+  const [localChosen, setLocalChosen] = useState(false)
+  const chosen = controlledChosen ?? localChosen
+  const shiftsQuery = useContractShifts(contractId, unitId, isConnected)
   const shifts = shiftsQuery.data ?? []
   const suggested = suggestShiftId(shifts, startTime)
 
   useEffect(() => {
-    if (chosenFromDraft) setChosen(true)
-  }, [chosenFromDraft])
+    // Only a confirmed online empty catalog can invalidate a previously saved choice.
+    // Missing offline data or an unfinished request must never discard the shift.
+    if (isConnected && shiftsQuery.isSuccess && shifts.length === 0 && value !== null) {
+      onChange(null)
+    }
+  }, [isConnected, shiftsQuery.isSuccess, shifts.length, value, onChange])
 
   useEffect(() => {
     if (chosen || shifts.length === 0) return
@@ -68,7 +59,14 @@ export function ShiftField({
     <>
       <SelectField
         label="Turno (opcional)"
-        value={selected ? `${selected.name} (${selected.startTime}–${selected.endTime})` : 'Sem turno'}
+        value={
+          selected
+            ? `${selected.name} (${selected.startTime}–${selected.endTime})`
+            : value
+              ? 'Turno indisponível — selecione outro'
+              : 'Sem turno'
+        }
+        error={shiftsQuery.isError ? 'Não foi possível atualizar os turnos.' : undefined}
         placeholder="Sem turno"
         helper={!chosen && selected ? 'Sugerido pelo horário de início.' : undefined}
         onPress={() => setOpen(true)}
@@ -87,7 +85,8 @@ export function ShiftField({
         ]}
         selectedValue={value ?? NONE}
         onSelect={(next) => {
-          setChosen(true)
+          setLocalChosen(true)
+          onChosen?.()
           onChange(next === NONE ? null : next)
           setOpen(false)
         }}

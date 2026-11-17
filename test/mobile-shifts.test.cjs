@@ -1,14 +1,19 @@
+/* global __dirname */
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const ts = require('typescript')
+const { loadSource } = require('./helpers/load-source.cjs')
 
 function load(file) {
   const module = { exports: {} }
-  const { outputText } = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, '../src', file), 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  })
+  const { outputText } = ts.transpileModule(
+    fs.readFileSync(path.resolve(__dirname, '../src', file), 'utf8'),
+    {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    },
+  )
   new Function('require', 'module', 'exports', outputText)(require, module, module.exports)
   return module.exports
 }
@@ -36,4 +41,32 @@ test('activity and deviation forms send the shift, still optional', () => {
     assert.match(screen, /\n\s+shiftId,\n/)
   }
   assert.match(read('types/execution.ts'), /shiftId\?: string \| null/)
+})
+
+test('shift survives serialized drafts, editing and HTTP submission; legacy automatic and explicit none remain distinct', async () => {
+  const { normalizeQueuedExecutionPayload } = loadSource('utils/queued-execution.ts')
+  const posts = []
+  const { createExecutionEntry } = loadSource('services/execution-entries.service.ts', {
+    '@/api/client': {
+      api: {
+        post: async (url, payload) => {
+          posts.push({ url, payload: JSON.parse(JSON.stringify(payload)) })
+          return { data: { id: 'remote' } }
+        },
+      },
+    },
+  })
+  for (const shiftId of ['night-shift', null, undefined]) {
+    for (const wrapped of [false, true]) {
+      const entry = { scaffoldServiceId: 'service', shiftId }
+      const stored = JSON.parse(JSON.stringify(wrapped ? { entry } : entry))
+      const restored = normalizeQueuedExecutionPayload(stored)
+      assert.equal(restored.entry.shiftId, shiftId)
+      const forSync = normalizeQueuedExecutionPayload(restored)
+      await createExecutionEntry(forSync.entry, 'mutation')
+      assert.equal(posts.at(-1).payload.shiftId, shiftId)
+      assert.equal(posts.at(-1).url, '/execution-entries')
+      assert.equal(posts.at(-1).payload.clientMutationId, 'mutation')
+    }
+  }
 })

@@ -28,6 +28,7 @@ function detail({ cached = service, local = null, fetch = async () => service, .
     '@/database/repositories/local-scaffold-service-repository': {
       localScaffoldServiceRepository: { getByLocalId: async () => local },
     },
+    '@/database/repositories/outbox-repository': { outboxRepository: { getByLocalId: async () => null } },
     '@/database/repositories/queue-cache-repository': {
       queueCacheRepository: {
         getByServiceId: async (...args) => { reads.push(args); return cached },
@@ -77,6 +78,33 @@ test('local service and missing context cannot cross contract/unit boundaries', 
   assert.equal(await setup.run(service.id, { ...scope, contractId: null }), null)
   assert.equal(setup.reads.length, 0)
   assert.equal(setup.requests.length, 0)
+})
+
+test('offline assembly reuses the GPS saved at creation only within the same scope and owner', async () => {
+  const local = { ...scope, localId: 'local_one', localScaffoldId: 'local_scaffold', remoteId: null }
+  const geolocation = { latitude: -6.4, longitude: -50.3, accuracyMeters: 5, capturedAt: '2026-11-17T12:00:00.000Z', method: 'GPS' }
+  const { OutboxEntityType } = loadSource('types/sync.ts')
+  let creation = { ...scope, entityType: OutboxEntityType.EMERGENCY_SCAFFOLD, payload: { geolocation } }
+  const setup = detail({ local,
+    '@/utils/local-scaffold': loadSource('utils/local-scaffold.ts'),
+    '@/database/repositories/outbox-repository': { outboxRepository: { getByLocalId: async (id) => {
+      assert.equal(id, local.localScaffoldId)
+      return creation
+    } } },
+  })
+  const item = await setup.run(local.localId, scope, false)
+  assert.equal(item.scaffold.latitude, geolocation.latitude)
+  assert.equal(item.scaffold.longitude, geolocation.longitude)
+  creation = { ...creation, contractId: 'another' }
+  assert.equal((await setup.run(local.localId, scope, false)).scaffold.latitude, undefined)
+  const owner = ownerMocks()
+  const switched = detail({ local, ...owner,
+    '@/database/repositories/outbox-repository': { outboxRepository: { getByLocalId: async () => {
+      owner['@/security/offline-owner'].setOfflineOwner({ id: 'other', tenantId: 'tenant' })
+      return creation
+    } } },
+  })
+  await assert.rejects(switched.run(local.localId, scope, false), /identidade ativa mudou/)
 })
 
 test('denial, deletion and cancellation do not silently revive cached service data', async () => {

@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { queueCacheRepository } from '@/database/repositories/queue-cache-repository'
 import { localScaffoldServiceRepository } from '@/database/repositories/local-scaffold-service-repository'
+import { outboxRepository } from '@/database/repositories/outbox-repository'
+import { OutboxEntityType } from '@/types/sync'
+import type { EmergencyScaffoldDraft } from '@/types/execution'
 import { fetchQueueService } from '@/services/scaffold-services.service'
 import { assertOfflineOwnerContext, captureOfflineOwnerContext } from '@/security/offline-owner'
 import type { QueueServiceItem } from '@/types/scaffold-service'
@@ -13,7 +16,11 @@ type Scope = {
   unitId: string | null
 }
 
-export function useQueueServiceDetail(serviceId: string | null, scope: Scope, isConnected: boolean) {
+export function useQueueServiceDetail(
+  serviceId: string | null,
+  scope: Scope,
+  isConnected: boolean,
+) {
   return useQuery<QueueServiceItem | null>({
     queryKey: ['queue-service-detail', serviceId, scope.contractId, scope.unitId, isConnected],
     enabled: Boolean(serviceId && scope.contractId && scope.unitId),
@@ -27,10 +34,26 @@ export function useQueueServiceDetail(serviceId: string | null, scope: Scope, is
       if (isLocalId(serviceId)) {
         const localService = await localScaffoldServiceRepository.getByLocalId(serviceId)
         assertOfflineOwnerContext(ownerContext)
-        if (!localService || localService.contractId !== scope.contractId || localService.unitId !== scope.unitId) {
+        if (
+          !localService ||
+          localService.contractId !== scope.contractId ||
+          localService.unitId !== scope.unitId
+        ) {
           return null
         }
-        if (!localService.remoteId) return localServiceToQueueItem(localService)
+        if (!localService.remoteId) {
+          // An offline scaffold already has its captured GPS in the creation draft.
+          // Reuse it when opening its assembly, without another capture or a schema change.
+          const creation = await outboxRepository.getByLocalId(localService.localScaffoldId)
+          assertOfflineOwnerContext(ownerContext)
+          const draft =
+            creation?.entityType === OutboxEntityType.EMERGENCY_SCAFFOLD &&
+            creation.contractId === scope.contractId &&
+            creation.unitId === scope.unitId
+              ? (creation.payload as EmergencyScaffoldDraft)
+              : undefined
+          return localServiceToQueueItem(localService, draft?.geolocation)
+        }
         remoteId = localService.remoteId
       }
 

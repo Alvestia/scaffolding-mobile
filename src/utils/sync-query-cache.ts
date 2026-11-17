@@ -6,6 +6,7 @@ const SYNCED_QUERIES = new Set([
   'queue-service-detail',
   'latest-scaffold',
   'crews',
+  'contract-shifts',
   'employees',
   'execute-employees',
   'deviation-employees',

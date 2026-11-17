@@ -6,6 +6,7 @@ import DateTimePicker, {
 import { router } from 'expo-router'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ShiftField } from '@/components/shift/shift-field'
+import { useEntryPreferences } from '@/hooks/use-entry-preferences'
 import {
   Alert,
   Modal,
@@ -54,7 +55,6 @@ import {
   type OperationalDeviationDraft,
 } from '@/types/operational-deviation'
 import { OutboxEntityType, SyncStatus } from '@/types/sync'
-import type { ExecutionFunctionQuantityInput, ExecutionLaborMode } from '@/types/execution'
 import {
   dateInputToIsoDate,
   formatDate,
@@ -147,7 +147,8 @@ function SelectTrigger({
 
 export default function DeviationsPage() {
   const isConnected = useConnectivityStore((state) => state.isConnected)
-  const { companyId, contractId, unitId } = useOperationalContextStore()
+  const { companyId, contractId, unitId, entryDefaults, ownerTenantId, ownerUserId } =
+    useOperationalContextStore()
   const runSyncNow = useSyncStore((state) => state.runSyncNow)
   const refreshState = useSyncStore((state) => state.refreshState)
   const scrollViewRef = useRef<ScrollView>(null)
@@ -167,16 +168,33 @@ export default function DeviationsPage() {
   const [occurredTime, setOccurredTime] = useState(formatTime(new Date()))
   const [resolvedDate, setResolvedDate] = useState(formatDate(new Date()))
   const [resolvedTime, setResolvedTime] = useState(formatTime(new Date()))
-  const [laborMode, setLaborMode] = useState<ExecutionLaborMode>('UNASSIGNED')
-  const [selectedCrewId, setSelectedCrewId] = useState('')
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
-  const [functionQuantities, setFunctionQuantities] = useState<ExecutionFunctionQuantityInput[]>([])
-  const [rosterExpanded, setRosterExpanded] = useState(true)
-  const lastCrewRef = useRef<string | null>(null)
-  const [notes, setNotes] = useState('')
-  const [shiftId, setShiftId] = useState<string | null>(null)
-  // Remounts the shift field after a save, so it suggests again.
   const [shiftFieldKey, setShiftFieldKey] = useState(0)
+  const {
+    shiftId,
+    setShiftId,
+    shiftChosen,
+    setShiftChosen,
+    laborMode,
+    setLaborMode,
+    selectedCrewId,
+    setSelectedCrewId,
+    selectedMemberIds,
+    setSelectedMemberIds,
+    membersChosen,
+    functionQuantities,
+    setFunctionQuantities,
+    markEdited,
+  } = useEntryPreferences(entryDefaults, {
+    contextKey: `${ownerTenantId}:${ownerUserId}:${unitId}:${contractId}`,
+    resetKey: shiftFieldKey,
+    pristine: !title && !description && !deviationTypeId && !linkWorkOrderId && !linkScaffoldId,
+  })
+  const changeSelectedMembers = (value: Parameters<typeof setSelectedMemberIds>[0]) => {
+    markEdited()
+    setSelectedMemberIds(value)
+  }
+  const [rosterExpanded, setRosterExpanded] = useState(true)
+  const [notes, setNotes] = useState('')
   const [evidences, setEvidences] = useState<DeviationEvidenceDraft[]>([])
   const [evidenceCaption, setEvidenceCaption] = useState('')
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -237,13 +255,10 @@ export default function DeviationsPage() {
   })
 
   useEffect(() => {
-    if (!selectedCrewId || lastCrewRef.current === selectedCrewId) return
+    if (!selectedCrewId || membersChosen) return
     const crew = (crewsQuery.data ?? []).find((item) => item.id === selectedCrewId)
-    if (!crew) return
-
-    setSelectedMemberIds((crew.members ?? []).map((member) => member.employeeId))
-    lastCrewRef.current = selectedCrewId
-  }, [crewsQuery.data, selectedCrewId])
+    if (crew) setSelectedMemberIds((crew.members ?? []).map((member) => member.employeeId))
+  }, [crewsQuery.data, selectedCrewId, membersChosen, setSelectedMemberIds])
 
   const deviationTypeOptions: SelectionOption[] = useMemo(
     () =>
@@ -436,12 +451,8 @@ export default function DeviationsPage() {
     setOccurredTime(formatTime(new Date()))
     setResolvedDate(formatDate(new Date()))
     setResolvedTime(formatTime(new Date()))
-    setLaborMode('UNASSIGNED')
-    setSelectedCrewId('')
     setSelectedMemberIds([])
-    setFunctionQuantities([])
     setNotes('')
-    setShiftId(null)
     setShiftFieldKey((current) => current + 1)
     setEvidences([])
     setEvidenceCaption('')
@@ -846,13 +857,15 @@ export default function DeviationsPage() {
                   </View>
 
                   <ShiftField
-                    key={shiftFieldKey}
+                    key={`${ownerTenantId}:${ownerUserId}:${unitId}:${contractId}:${shiftFieldKey}`}
                     contractId={contractId}
                     unitId={unitId}
                     isConnected={isConnected}
                     startTime={occurredTime}
                     value={shiftId}
                     onChange={setShiftId}
+                    chosen={shiftChosen}
+                    onChosen={() => setShiftChosen(true)}
                   />
 
                   <View style={styles.requiredNotice}>
@@ -1051,7 +1064,7 @@ export default function DeviationsPage() {
 
                                 <Pressable
                                   onPress={() =>
-                                    setSelectedMemberIds((current) =>
+                                    changeSelectedMembers((current) =>
                                       current.filter((employeeId) => employeeId !== employee.id),
                                     )
                                   }
@@ -1263,10 +1276,7 @@ export default function DeviationsPage() {
           caption: crew.foreman?.name ? `Encarregado: ${crew.foreman.name}` : 'Sem encarregado',
         }))}
         selectedValue={selectedCrewId}
-        onSelect={(value) => {
-          setSelectedCrewId(value)
-          lastCrewRef.current = null
-        }}
+        onSelect={setSelectedCrewId}
         onClose={() => setActivePicker(null)}
       />
       <SelectionModal
@@ -1277,7 +1287,7 @@ export default function DeviationsPage() {
         selectedValues={selectedMemberIds}
         multiple
         confirmLabel="Aplicar equipe"
-        onConfirm={setSelectedMemberIds}
+        onConfirm={changeSelectedMembers}
         onClose={() => setActivePicker(null)}
         emptyMessage={
           employeesQuery.isLoading

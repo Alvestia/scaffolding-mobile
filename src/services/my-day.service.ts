@@ -118,7 +118,7 @@ export async function listDeviceActivities(scope: Scope) {
     localScaffoldServiceRepository.listPendingByScope(scope),
   ])
   const services = new Map<string, QueueServiceItem>()
-  for (const service of [...cached, ...local.map(localServiceToQueueItem)]) {
+  for (const service of [...cached, ...local.map((service) => localServiceToQueueItem(service))]) {
     services.set(service.id, service)
   }
   return items

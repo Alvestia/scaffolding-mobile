@@ -7,6 +7,7 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { ShiftField } from '@/components/shift/shift-field'
+import { useEntryPreferences } from '@/hooks/use-entry-preferences'
 import { Redirect, router, useLocalSearchParams } from 'expo-router'
 import {
   ActivityIndicator,
@@ -47,8 +48,6 @@ import {
   type CreateExecutionEntryDto,
   type ExecutionComponentAdvanceInput,
   type ExecutionEvidenceDraft,
-  type ExecutionFunctionQuantityInput,
-  type ExecutionLaborMode,
   type ExecutionMeasurementAdjustmentDraft,
   type QueuedExecutionEntryPayload,
 } from '@/types/execution'
@@ -235,7 +234,7 @@ export default function ExecuteServicePage() {
   }>()
   const user = useAuthStore((state) => state.user)
   const isConnected = useConnectivityStore((state) => state.isConnected)
-  const { contractId, unitId } = useOperationalContextStore()
+  const { contractId, unitId, entryDefaults } = useOperationalContextStore()
   const runSyncNow = useSyncStore((state) => state.runSyncNow)
   const refreshState = useSyncStore((state) => state.refreshState)
   const [activePicker, setActivePicker] = useState<PickerKey>(null)
@@ -245,7 +244,6 @@ export default function ExecuteServicePage() {
   const [rosterExpanded, setRosterExpanded] = useState(false)
   const [formStep, setFormStep] = useState<ExecutionFormStep>('ENTRY')
   const scrollViewRef = useRef<ScrollView>(null)
-  const lastCrewRef = useRef<string | null>(null)
 
   const serviceQuery = useQueueServiceDetail(serviceId ?? null, { contractId, unitId }, isConnected)
   const service = serviceQuery.isError ? undefined : serviceQuery.data
@@ -272,12 +270,30 @@ export default function ExecuteServicePage() {
   const [endDate, setEndDate] = useState(formatDate(new Date()))
   const [endTime, setEndTime] = useState(formatTime(new Date()))
   const [notes, setNotes] = useState('')
-  const [shiftId, setShiftId] = useState<string | null>(null)
-  const [shiftChosen, setShiftChosen] = useState(false)
-  const [laborMode, setLaborMode] = useState<ExecutionLaborMode>('UNASSIGNED')
-  const [selectedCrewId, setSelectedCrewId] = useState('')
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([])
-  const [functionQuantities, setFunctionQuantities] = useState<ExecutionFunctionQuantityInput[]>([])
+  const {
+    shiftId,
+    setShiftId,
+    shiftChosen,
+    setShiftChosen,
+    laborMode,
+    setLaborMode,
+    selectedCrewId,
+    setSelectedCrewId,
+    selectedMemberIds,
+    setSelectedMemberIds,
+    membersChosen,
+    functionQuantities,
+    setFunctionQuantities,
+    markEdited,
+  } = useEntryPreferences(entryDefaults, {
+    contextKey: `${user?.tenantId}:${user?.id}:${unitId}:${contractId}:${serviceId}:${draftLocalId ?? 'new'}`,
+    draft: Boolean(draftLocalId),
+    pristine: !notes && !percentageValue && !directInputValue && !height && !width && !length,
+  })
+  const changeSelectedMembers = (value: Parameters<typeof setSelectedMemberIds>[0]) => {
+    markEdited()
+    setSelectedMemberIds(value)
+  }
   const [componentAdvances, setComponentAdvances] = useState<ExecutionComponentAdvanceInput[]>([])
   const [hasMeasurementAdjustments, setHasMeasurementAdjustments] = useState(false)
   const [measurementAdjustments, setMeasurementAdjustments] = useState<
@@ -506,18 +522,10 @@ export default function ExecuteServicePage() {
   ])
 
   useEffect(() => {
-    if (!selectedCrewId || lastCrewRef.current === selectedCrewId) {
-      return
-    }
-
+    if (!selectedCrewId || membersChosen) return
     const crew = (crewsQuery.data ?? []).find((item) => item.id === selectedCrewId)
-    if (!crew) {
-      return
-    }
-
-    setSelectedMemberIds((crew.members ?? []).map((member) => member.employeeId))
-    lastCrewRef.current = selectedCrewId
-  }, [crewsQuery.data, selectedCrewId])
+    if (crew) setSelectedMemberIds((crew.members ?? []).map((member) => member.employeeId))
+  }, [crewsQuery.data, selectedCrewId, membersChosen, setSelectedMemberIds])
 
   useEffect(() => {
     if (!draftLocalId || hydratedDraftRef.current === draftLocalId) {
@@ -568,7 +576,7 @@ export default function ExecuteServicePage() {
       }
       setLaborMode(payload.laborMode ?? (payload.crewId ? 'CREW' : 'UNASSIGNED'))
       setSelectedCrewId(payload.crewId ?? '')
-      setSelectedMemberIds(payload.memberEmployeeIds ?? [])
+      if (payload.memberEmployeeIds !== undefined) setSelectedMemberIds(payload.memberEmployeeIds)
       setFunctionQuantities(payload.functionQuantities ?? [])
       setComponentAdvances(
         payload.scaffoldComponentAdvances ??
@@ -589,7 +597,16 @@ export default function ExecuteServicePage() {
     return () => {
       active = false
     }
-  }, [draftLocalId, setGeolocationDraft])
+  }, [
+    draftLocalId,
+    setGeolocationDraft,
+    setFunctionQuantities,
+    setLaborMode,
+    setSelectedCrewId,
+    setSelectedMemberIds,
+    setShiftChosen,
+    setShiftId,
+  ])
 
   const calculatedDimensionsValue = useMemo(() => {
     if (!service) {
@@ -801,6 +818,11 @@ export default function ExecuteServicePage() {
   const handleSubmit = async () => {
     if (basisChanged || !draftBasis) { setSubmitError('A base foi revisada. Confira os valores e escolha como tratar este rascunho.'); return }
     if (isSubmitting || geolocation.busy) {
+      return
+    }
+
+    if (service?.type === 'MONTAGEM' && !geolocation.hasLocation && !geolocation.value) {
+      setSubmitError('Capture o GPS do andaime antes de salvar a montagem.')
       return
     }
 
@@ -1177,7 +1199,7 @@ export default function ExecuteServicePage() {
 
                     <FormSection
                       title="Efetivo da execução"
-                      subtitle="Escolha a composição apenas para este lançamento, como no sistema web."
+                      subtitle="O padrão da Home preenche novos lançamentos. Alterações aqui valem somente para esta execução."
                     >
                       <SegmentedControl
                         value={laborMode}
@@ -1277,7 +1299,7 @@ export default function ExecuteServicePage() {
 
                                     <Pressable
                                       onPress={() =>
-                                        setSelectedMemberIds((current) =>
+                                        changeSelectedMembers((current) =>
                                           current.filter((item) => item !== employee.id),
                                         )
                                       }
@@ -1443,6 +1465,7 @@ export default function ExecuteServicePage() {
                         </View>
                       </View>
                       <ShiftField
+                        key={`${unitId}:${contractId}:${serviceId}:${draftLocalId ?? 'new'}`}
                         contractId={contractId}
                         unitId={unitId}
                         isConnected={isConnected}
@@ -1450,6 +1473,7 @@ export default function ExecuteServicePage() {
                         value={shiftId}
                         onChange={setShiftId}
                         chosen={shiftChosen}
+                        onChosen={() => setShiftChosen(true)}
                       />
                     </FormSection>
 
@@ -1656,10 +1680,7 @@ export default function ExecuteServicePage() {
           caption: crew.foreman?.name ? `Encarregado: ${crew.foreman.name}` : 'Sem encarregado',
         }))}
         selectedValue={selectedCrewId}
-        onSelect={(value) => {
-          setSelectedCrewId(value)
-          lastCrewRef.current = null
-        }}
+        onSelect={setSelectedCrewId}
         onClose={() => setActivePicker(null)}
       />
 
@@ -1671,7 +1692,7 @@ export default function ExecuteServicePage() {
         multiple
         selectedValues={[]}
         onConfirm={(values) =>
-          setSelectedMemberIds((current) => [...new Set([...current, ...values])])
+          changeSelectedMembers((current) => [...new Set([...current, ...values])])
         }
         onClose={() => setActivePicker(null)}
         confirmLabel="Adicionar ao avanço"

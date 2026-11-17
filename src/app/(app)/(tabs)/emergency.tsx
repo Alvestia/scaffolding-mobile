@@ -632,6 +632,11 @@ export default function EmergencyPage() {
       return
     }
 
+    if (!geolocation.hasLocation && !geolocation.value) {
+      setSubmitError('Capture o GPS do andaime antes de cadastrar.')
+      return
+    }
+
     if (!scope || !companyId) {
       setSubmitError('Defina unidade e contrato antes de criar um andaime.')
       return

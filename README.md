@@ -1,6 +1,11 @@
 # Scaffold Mobile
 
 eas build --platform android --profile preview
+# APK para testes
+eas build --platform android --profile preview
+
+# AAB para Google Play
+eas build --platform android --profile production
 
 outras, development e production
 
@@ -145,69 +150,83 @@ npm run export:web
 
 
 
-## APK local, sem usar a cota de builds do EAS
+## Preferências da Home e turno dos lançamentos
+
+Na Home, a faixa recolhível **Padrão dos lançamentos**, abaixo do resumo do contrato,
+permite salvar equipe ou funções com quantidades e turno para novas atividades e desvios. É possível fixar um turno,
+escolher **Sem turno** ou manter a sugestão pelo horário. Cada lançamento pode
+alterar os valores sem modificar o padrão salvo; rascunhos reabertos mantêm seus
+próprios dados. Ao selecionar uma equipe, é possível visualizar seus integrantes,
+adicionar funcionários ativos do mesmo contrato, remover pessoas e restaurar a
+composição da equipe. Essa seleção fica salva localmente para os próximos
+lançamentos; ela não altera o cadastro da equipe na API. Padrões antigos sem uma
+composição personalizada continuam carregando os integrantes atuais da equipe.
+
+O seletor de turno só aparece nos contratos com turnos cadastrados, tanto na
+Home quanto em atividades e desvios. Um carregamento pendente ou sem cache
+offline não apaga uma escolha já salva.
+
+O padrão persiste no aparelho para o usuário e o contrato atuais. Trocar unidade,
+contrato ou usuário, ou sair da conta, limpa o padrão para evitar misturar
+equipes e turnos de contextos diferentes. A seleção funciona offline com os
+catálogos já carregados. A atualização da base também baixa os turnos.
+
+O normalizador da fila agora preserva `shiftId`, incluindo `null` explícito para
+**Sem turno** e ausência do campo nos registros antigos. Antes, esse campo era
+descartado ao preparar a sincronização e ao reabrir rascunhos. A API e a web já
+suportam o turno; a correção está no mobile. Registros já sincronizados precisam
+ser conferidos/corrigidos na web, pois não é possível reconstruir automaticamente
+a escolha que foi perdida. Pendências que ainda guardam o turno passam a enviá-lo.
+
+O menu no cabeçalho reúne a navegação e as ações da conta. No Android, **Sair do
+aplicativo** fecha a tela sem limpar a sessão, o contexto ou as preferências.
+**Logout** é uma ação separada, com confirmação e aviso sobre pendências e
+reativação de contas de campo. A Home mostra os cartões de fila de execução,
+novo andaime e desvios em uma coluna abaixo dos padrões de lançamento. O cartão
+de inspeções aparece para quem tem `inspection:view`, seguindo a mesma regra
+da navegação inferior e do menu. A página permite rolagem vertical.
+
+O cadastro de andaime e o lançamento de montagem exigem GPS quando ainda não
+há localização. Uma posição existente é preservada. A captura usa a cor primária
+do aplicativo, funciona offline e não oferece a opção de continuar sem GPS.
+Desmontagens e as regras de GPS das inspeções mantêm seus critérios próprios.
+
+## APK e AAB pelo Expo/EAS
 
 O perfil `preview` já contém `android.buildType: apk` e a URL HTTPS da API.
-O APK funciona sem o servidor Metro. Execute na pasta `scaffolding-mobile`:
+O APK funciona sem o servidor Metro. Neste ambiente WSL, gerar os pacotes
+remotamente pelo EAS: builds nativos locais já excederam a memória disponível.
+Execute na pasta `scaffolding-mobile`:
 
 ```bash
-npm run build:apk:local
+eas build --platform android --profile preview
 ```
 
-Equivalente:
+O EAS fornece o link para baixar o APK. Preserve a mesma chave de assinatura
+para atualizar uma instalação anterior. Uma atualização JavaScript/OTA não
+substitui mudanças nativas do APK.
+
+A ofuscação R8, a otimização e a redução de recursos estão habilitadas por padrão
+em `preview` e `production`, com as regras de compatibilidade `Record`/`Field`
+do Expo validadas no aparelho em 17/11/2026. Não há perfil separado nem variável
+extra para ativar a ofuscação.
+
+Para a Google Play, o perfil `production` gera AAB:
 
 ```bash
-eas build --platform android --profile preview --local --output ./scaffold-mobile.apk
+eas build --platform android --profile production
 ```
 
-O arquivo final será `scaffold-mobile.apk`. A compilação ocorre nesta máquina.
-O EAS ainda exige autenticação (`eas login`) e acesso para consultar o projeto
-ou obter as credenciais de assinatura configuradas. Preserve a mesma chave de
-assinatura para atualizar uma instalação anterior.
+`npm run check:android-release` verifica a configuração sem compilar APK/AAB.
+O manifesto declara orientação retrato e Wi-Fi como recursos opcionais para
+evitar restrições indevidas de dispositivos no Google Play. Esse ajuste exige
+um novo AAB gerado no EAS, sem mudar as regras de GPS dos lançamentos.
+Os detalhes e a validação do pacote final estão em
+[Qualidade do release Android](ANDROID_RELEASE_QUALITY.md).
 
-Pré-requisitos: Node 24, EAS CLI, JDK 17 e Android SDK/NDK compatíveis com o
-Expo SDK 55. Instale pelo Android Studio/SDK Manager a plataforma Android 36,
-Build Tools e NDK exigidos pelo projeto gerado; configure `JAVA_HOME`,
-`ANDROID_HOME` e o `PATH` das ferramentas. Confira `java -version`,
-`adb --version` e `sdkmanager --list_installed` antes do build.
-
-As variáveis deste WSL foram configuradas em `~/.config/android/env.sh`,
-carregado por `~/.bashrc` e `~/.profile`:
-
-```bash
-export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
-export ANDROID_HOME="$HOME/Android/Sdk"
-```
-
-Para atualizar um terminal que já estava aberto:
-
-```bash
-source ~/.config/android/env.sh
-```
-
-O SDK deste projeto utiliza Android 36, Build Tools 36.0.0, NDK
-27.1.12297006 e CMake 3.22.1. Não é necessário instalar Gradle globalmente;
-o build utiliza o wrapper do projeto Android gerado.
-
-Em WSL, as ferramentas precisam estar disponíveis dentro do Linux. O Expo
-não oferece suporte oficial a builds locais em Windows/WSL; Linux e macOS são
-suportados. Não é necessário pagar um plano para compilar na própria máquina.
-
-Para a Google Play, o perfil `production` continua gerando AAB:
-
-O prebuild habilita R8 (ofuscação/otimização), redução de recursos e orientação
-adaptável no Android. Antes de gerar a próxima versão, execute
-`npm run check:android-release`. Os detalhes e a validação do pacote final estão
-em [Qualidade do release Android](ANDROID_RELEASE_QUALITY.md).
-
-```bash
-eas build --platform android --profile production --local --output ./scaffold-mobile.aab
-```
-
-Esse perfil usa a versão remota e `autoIncrement`. Um APK local bem-sucedido
+O perfil `production` usa a versão remota e `autoIncrement`. Um APK bem-sucedido
 não substitui a homologação do AAB, das bibliotecas de 16 KB e dos formulários
 do Play Console.
 
-Referências: [EAS local](https://docs.expo.dev/build-reference/local-builds/),
-[APK](https://docs.expo.dev/build-reference/apk/),
-[build de release local](https://docs.expo.dev/guides/local-app-production/).
+Referências: [APK](https://docs.expo.dev/build-reference/apk/),
+[EAS Build](https://docs.expo.dev/build/introduction/).

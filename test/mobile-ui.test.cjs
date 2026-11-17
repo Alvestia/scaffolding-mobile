@@ -153,6 +153,8 @@ for (const failure of [null, 'download', 'refresh']) {
         },
       },
     }
+    mocks['@/components/home/user-menu'] = { UserMenu: 'UserMenu' }
+    mocks['@/components/home/entry-defaults-card'] = { EntryDefaultsCard: 'EntryDefaultsCard' }
     const Home = loadSource('app/(app)/(tabs)/index.tsx', mocks).default
     let tree = harness.render(Home)
     const update = findElement(

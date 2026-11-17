@@ -1,3 +1,5 @@
+import type { EntryDefaults } from './entry-defaults'
+
 export type TeamMember = {
   employeeId: string
   name: string
@@ -20,5 +22,6 @@ export type OperationalContext = {
   crewName: string | null
   crewForemanName: string | null
   teamMembers: TeamMember[]
+  entryDefaults: EntryDefaults | null
   lastUpdatedAt: string | null
 }

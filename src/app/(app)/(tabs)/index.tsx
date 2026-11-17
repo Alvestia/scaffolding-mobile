@@ -30,8 +30,44 @@ import { getErrorMessage } from '@/utils/error'
 import { getActiveDeviceCredential } from '@/services/session-storage'
 import { revokeDeviceSession } from '@/services/device-session.service'
 import { invalidateSyncedQueries } from '@/utils/sync-query-cache'
+import { EntryDefaultsCard } from '@/components/home/entry-defaults-card'
+import { UserMenu } from '@/components/home/user-menu'
+import { hasPermission } from '@/utils/inspection-rules'
+
+const homeShortcuts = [
+  {
+    title: 'Fila de execução',
+    description: 'Consulte as atividades e registre os lançamentos.',
+    icon: 'list-outline',
+    href: '/(app)/(tabs)/queue',
+    permission: null,
+  },
+  {
+    title: 'Novo andaime',
+    description: 'Cadastre um andaime em campo.',
+    icon: 'add-circle-outline',
+    href: '/(app)/(tabs)/emergency',
+    permission: null,
+  },
+  {
+    title: 'Desvios',
+    description: 'Registre os desvios da operação.',
+    icon: 'alert-circle-outline',
+    href: '/(app)/(tabs)/deviations',
+    permission: null,
+  },
+  {
+    title: 'Inspeções',
+    description: 'Consulte e realize as inspeções dos andaimes.',
+    icon: 'shield-checkmark-outline',
+    href: '/(app)/(tabs)/inspections',
+    permission: 'inspection:view',
+  },
+] as const
 
 export default function HomePage() {
+  const user = useAuthStore((state) => state.user)
+  const [menuVisible, setMenuVisible] = useState(false)
   const clearSession = useAuthStore((state) => state.clearSession)
   const isConnected = useConnectivityStore((state) => state.isConnected)
   const context = useOperationalContextStore()
@@ -70,7 +106,9 @@ export default function HomePage() {
         : null,
     [context.companyId, context.contractId, context.unitId],
   )
-  const canRunManualSync = Boolean(syncScope && isConnected && !isSyncing && !manualSyncVisible && !queueQuery.isFetching)
+  const canRunManualSync = Boolean(
+    syncScope && isConnected && !isSyncing && !manualSyncVisible && !queueQuery.isFetching,
+  )
   const manualSyncComplete =
     manualSyncVisible && manualSyncSteps.every((step) => step.status === 'done')
 
@@ -90,26 +128,26 @@ export default function HomePage() {
     const isFieldAccount = useAuthStore.getState().user?.accountType === 'FIELD'
     const warningMessage = isFieldAccount
       ? // No password to come back with: leaving needs a new code from the office.
-        `Ao sair, este celular só volta a entrar com um novo código de ativação do responsável pelo contrato.${
+        `Ao fazer logout, este celular só volta a entrar com um novo código de ativação do responsável pelo contrato.${
           pendingCount + failedCount > 0
-            ? ' Os registros ainda não enviados ficam presos no aparelho até lá: sincronize antes de sair.'
+            ? ' Os registros ainda não enviados ficam presos no aparelho até lá: sincronize antes de encerrar a sessão.'
             : ''
         }`
       : pendingCount + failedCount > 0
-        ? 'Existem pendencias locais neste aparelho. Se for sair, entre novamente com o mesmo usuario antes de tentar sincronizar.'
+        ? 'Existem pendencias locais neste aparelho. Se encerrar a sessão, entre novamente com o mesmo usuario antes de tentar sincronizar.'
         : 'Deseja encerrar sua sessao neste aparelho?'
 
     if (Platform.OS === 'web') {
-      const accepted = globalThis.confirm ? globalThis.confirm(warningMessage) : true
+      const accepted = globalThis.confirm ? globalThis.confirm(warningMessage) : false
       if (accepted) {
         void handleLogout()
       }
       return
     }
 
-    Alert.alert('Sair do app', warningMessage, [
+    Alert.alert('Confirmar logout', warningMessage, [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Sair', style: 'destructive', onPress: () => void handleLogout() },
+      { text: 'Encerrar sessão', style: 'destructive', onPress: () => void handleLogout() },
     ])
   }
 
@@ -148,13 +186,15 @@ export default function HomePage() {
           <View style={styles.topBarActions}>
             <NetworkStatusIndicator />
             <Pressable
-              onPress={confirmLogout}
+              accessibilityRole="button"
+              accessibilityLabel="Abrir menu do usuário"
+              onPress={() => setMenuVisible(true)}
               style={({ pressed }) => [
-                styles.logoutButton,
-                pressed ? styles.logoutButtonPressed : null,
+                styles.menuButton,
+                pressed ? styles.menuButtonPressed : null,
               ]}
             >
-              <Ionicons name="log-out-outline" size={18} color={colors.white} />
+              <Ionicons name="menu-outline" size={20} color={colors.white} />
             </Pressable>
           </View>
         </View>
@@ -249,18 +289,33 @@ export default function HomePage() {
                   </>
                 ) : (
                   <>
-                    <View style={styles.readyBadge}>
-                      <Text style={styles.readyBadgeLabel}>
-                        {isConnected ? 'Base local pronta' : 'Base offline carregada'}
-                      </Text>
+                    <View style={styles.heroHeading}>
+                      <View style={styles.scopeTextBlock}>
+                        <Text style={styles.heroTitle}>Resumo do contrato</Text>
+                        <Text style={styles.heroSubtitle}>
+                          {isConnected ? 'Base local pronta' : 'Base offline carregada'}
+                        </Text>
+                      </View>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={handleManualSync}
+                        disabled={!canRunManualSync}
+                        style={({ pressed }) => [
+                          styles.heroActionSecondary,
+                          !canRunManualSync && styles.heroActionSecondaryDisabled,
+                          pressed && canRunManualSync && styles.heroActionPressed,
+                        ]}
+                      >
+                        <Ionicons name="sync-outline" size={15} color={colors.primaryStrong} />
+                        <Text style={styles.heroActionSecondaryLabel}>
+                          {!isConnected
+                            ? 'Offline'
+                            : isSyncing || queueQuery.isFetching
+                              ? 'Atualizando'
+                              : 'Atualizar'}
+                        </Text>
+                      </Pressable>
                     </View>
-                    <Text style={styles.heroTitle}>Pronto para começar</Text>
-                    <Text style={styles.heroSubtitle}>
-                      {queueItems.length > 0
-                        ? `Encontramos ${queueItems.length} atividade(s) disponivel(is) para este contrato.`
-                        : 'A base deste contrato ja foi carregada. Agora podemos seguir para os proximos passos.'}
-                    </Text>
-
                     <View style={styles.readyStatsRow}>
                       <View style={styles.readyStat}>
                         <Text style={styles.readyStatValue}>{queueItems.length}</Text>
@@ -275,38 +330,42 @@ export default function HomePage() {
                         <Text style={styles.readyStatLabel}>Com erro</Text>
                       </View>
                     </View>
-
-                    <View style={styles.heroFooterRow}>
-                      <Pressable
-                        onPress={() => router.push('/(app)/(tabs)/queue' as never)}
-                        style={({ pressed }) => [
-                          styles.heroActionPrimary,
-                          pressed ? styles.heroActionPressed : null,
-                        ]}
-                      >
-                        <Text style={styles.heroActionPrimaryLabel}>Abrir fila</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={handleManualSync}
-                        disabled={!canRunManualSync}
-                        style={({ pressed }) => [
-                          styles.heroActionSecondary,
-                          !canRunManualSync ? styles.heroActionSecondaryDisabled : null,
-                          pressed && canRunManualSync ? styles.heroActionPressed : null,
-                        ]}
-                      >
-                        <Text style={styles.heroActionSecondaryLabel}>
-                          {!isConnected
-                            ? 'Offline'
-                            : isSyncing || queueQuery.isFetching
-                              ? 'Atualizando'
-                              : 'Atualizar'}
-                        </Text>
-                      </Pressable>
-                    </View>
+                    <Text style={styles.heroSubtitle}>
+                      Última sincronização: {formatShortDateTime(lastSyncAt)}
+                    </Text>
                   </>
                 )}
               </View>
+            </View>
+
+            <EntryDefaultsCard
+              key={`${context.ownerTenantId}:${context.ownerUserId}:${context.unitId}:${context.contractId}`}
+            />
+
+            <View style={styles.shortcutList}>
+              {homeShortcuts
+                .filter((item) => !item.permission || hasPermission(user, item.permission))
+                .map((item) => (
+                  <Pressable
+                    key={item.href}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.title}
+                    onPress={() => router.push(item.href as never)}
+                    style={({ pressed }) => [
+                      styles.shortcutCard,
+                      pressed && styles.shortcutPressed,
+                    ]}
+                  >
+                    <View style={styles.shortcutIcon}>
+                      <Ionicons name={item.icon} size={22} color={colors.primary} />
+                    </View>
+                    <View style={styles.scopeTextBlock}>
+                      <Text style={styles.shortcutTitle}>{item.title}</Text>
+                      <Text style={styles.shortcutDescription}>{item.description}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                  </Pressable>
+                ))}
             </View>
 
             {manualSyncError && !manualSyncVisible ? (
@@ -400,72 +459,58 @@ export default function HomePage() {
                 ) : null}
               </View>
             ) : null}
-
-            <View style={styles.actionGrid}>
-              <Pressable
-                onPress={() => router.push('/(app)/(tabs)/queue' as never)}
-                style={({ pressed }) => [
-                  styles.actionCard,
-                  pressed ? styles.actionCardPressed : null,
-                ]}
-              >
-                <View style={styles.actionIconWrap}>
-                  <Ionicons name="list-outline" size={18} color={colors.primaryStrong} />
-                </View>
-                <Text style={styles.actionTitle}>Fila de execução</Text>
-                <Text style={styles.actionMeta}>{queueItems.length} serviço(s) disponíveis</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => router.push('/(app)/(tabs)/emergency' as never)}
-                style={({ pressed }) => [
-                  styles.actionCard,
-                  pressed ? styles.actionCardPressed : null,
-                ]}
-              >
-                <View style={styles.actionIconWrap}>
-                  <Ionicons name="add-circle-outline" size={18} color={colors.primaryStrong} />
-                </View>
-                <Text style={styles.actionTitle}>Novo andaime</Text>
-                <Text style={styles.actionMeta}>Criar em campo</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => router.push('/(app)/(tabs)/sync' as never)}
-                style={({ pressed }) => [
-                  styles.actionCard,
-                  failedCount > 0 ? styles.actionCardDanger : null,
-                  pressed ? styles.actionCardPressed : null,
-                ]}
-              >
-                <View style={styles.actionIconWrap}>
-                  <Ionicons
-                    name={failedCount > 0 ? 'alert-circle-outline' : 'cloud-upload-outline'}
-                    size={18}
-                    color={failedCount > 0 ? colors.danger : colors.primaryStrong}
-                  />
-                </View>
-                <Text style={styles.actionTitle}>Pendências offline</Text>
-                <Text style={styles.actionMeta}>
-                  {failedCount > 0 ? `${failedCount} com erro` : `${pendingCount} aguardando envio`}
-                </Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.bottomInfo}>
-              <View style={styles.infoCard}>
-                <Text style={styles.infoLabel}>Ultima sincronizacao</Text>
-                <Text style={styles.infoValue}>{formatShortDateTime(lastSyncAt)}</Text>
-              </View>
-            </View>
           </>
         )}
       </ScrollView>
+      <UserMenu
+        visible={menuVisible}
+        user={user}
+        onClose={() => setMenuVisible(false)}
+        onLogout={confirmLogout}
+        onSync={() => void handleManualSync()}
+        canSync={canRunManualSync}
+      />
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
+  shortcutList: {
+    flexDirection: 'column',
+    gap: spacing.md,
+  },
+  shortcutCard: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  shortcutPressed: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  shortcutIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shortcutTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  shortcutDescription: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: colors.surfaceMuted,
@@ -505,15 +550,15 @@ const styles = StyleSheet.create({
     width: 112,
     height: 30,
   },
-  logoutButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.primary,
+  menuButton: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoutButtonPressed: {
+  menuButtonPressed: {
     opacity: 0.86,
   },
   sectionLabel: {
@@ -584,28 +629,14 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: colors.text,
-    fontSize: 17,
-    lineHeight: 23,
+    fontSize: 15,
+    lineHeight: 21,
     fontWeight: '700',
   },
   heroSubtitle: {
     color: colors.textMuted,
     fontSize: 13,
     lineHeight: 19,
-  },
-  readyBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: '#C9E0E7',
-  },
-  readyBadgeLabel: {
-    color: colors.primaryStrong,
-    fontSize: 11,
-    fontWeight: '700',
   },
   readyStatsRow: {
     width: '100%',
@@ -634,12 +665,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  heroFooterRow: {
-    width: '100%',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
   heroAction: {
     alignSelf: 'flex-start',
     minHeight: 44,
@@ -663,22 +688,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  heroActionPrimary: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-  },
-  heroActionPrimaryLabel: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: '700',
-  },
+  heroHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   heroActionSecondary: {
-    width: 112,
-    minHeight: 42,
+    paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 44,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -798,76 +813,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: '600',
   },
-  actionGrid: {
-    gap: spacing.sm,
-  },
-  actionCard: {
-    minHeight: 74,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: '#E5ECEF',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  actionCardPressed: {
-    backgroundColor: '#F8FBFC',
-  },
-  actionCardDanger: {
-    borderColor: '#F3C7C7',
-    backgroundColor: '#FFF7F7',
-  },
-  actionIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionTitle: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  actionMeta: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  bottomInfo: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  infoCard: {
-    flex: 1,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: '#E5ECEF',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    gap: 4,
-  },
   infoCardPressed: {
     backgroundColor: '#FBFCFD',
-  },
-  infoLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.9,
-  },
-  infoValue: {
-    color: colors.text,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '600',
   },
   emptyShell: {
     gap: spacing.md,

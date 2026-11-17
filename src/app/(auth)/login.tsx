@@ -310,7 +310,7 @@ export default function LoginPage() {
                         <Text style={styles.keepSignedInHint}>
                           {keepSignedIn
                             ? 'Continua conectado ao reabrir o app. Desmarque em aparelho compartilhado.'
-                            : `A sessão termina em ${SHIFT_SESSION_TTL_HOURS} horas ou ao tocar em Sair.`}
+                            : `A sessão termina em ${SHIFT_SESSION_TTL_HOURS} horas ou ao confirmar o logout.`}
                         </Text>
                       </View>
                     </Pressable>

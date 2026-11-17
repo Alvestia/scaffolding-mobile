@@ -1,12 +1,15 @@
 # Qualidade do release Android e avisos do Play Console
 
-Atualizado em 16/11/2026. Configuração para Expo SDK 55 / React Native 0.83.
+Atualizado em 17/11/2026. Configuração para Expo SDK 55 / React Native 0.83.
 
 ## Ofuscação e otimização DEX
 
-O template do Expo deixava minificação e redução de recursos desativadas por
-padrão. O plugin `plugins/with-android-release.js`, registrado no `app.json`,
-aplica em cada prebuild:
+**A ofuscação R8, a otimização e a redução de recursos são o padrão dos perfis
+`preview` (APK) e `production` (AAB). O usuário confirmou o funcionamento do APK
+ofuscado no aparelho em 17/11/2026. Não é necessário perfil alternativo nem flag
+de ambiente para ativar essa configuração.**
+
+O plugin `plugins/with-android-release.js`, registrado no `app.json`, aplica:
 
 ```properties
 android.enableMinifyInReleaseBuilds=true
@@ -14,21 +17,61 @@ android.enableShrinkResourcesInReleaseBuilds=true
 android.r8.optimizedResourceShrinking=true
 ```
 
-O build release utiliza `proguard-android-optimize.txt` no lugar de
-`proguard-android.txt` (que inclui `-dontoptimize`). O Android Gradle Plugin
-recebe o patch 8.12.2, compatível com a série 8.12 do SDK 55. Os builds debug
-continuam com o comportamento do template. As regras nativas de Reanimated e
-TurboModules são preservadas; não foram adicionadas regras globais para impedir
-ofuscação ou ocultar erros de classes ausentes.
+São mantidos o preset `proguard-android-optimize.txt`, o AGP 8.12.2 e as regras
+de compatibilidade do Expo descritas abaixo, iguais aos do APK validado.
+O plugin também atualiza projetos Android anteriormente gerados sem R8.
+Expo 55.0.32, banco, migrações, criptografia offline e SecureStore são preservados.
 
-Não edite manualmente o diretório `android/` gerado para manter essas opções:
-ele não é versionado e será recriado no EAS. O plugin falha com uma mensagem
-explícita se um novo template mudar os pontos esperados de configuração do
-Gradle; revise-o ao atualizar o SDK.
+Não edite manualmente o diretório `android/` gerado: ele não é versionado e será
+recriado no EAS. O plugin falha com uma mensagem explícita se um novo template
+mudar os pontos esperados de configuração do Gradle; revise-o ao atualizar o SDK.
 
-O limite anunciado pela Google Play é 25% em otimização, ofuscação e redução,
-com aplicação em fevereiro de 2027 para apps com DEX significativo. O percentual
-precisa ser medido no AAB final; ativar as opções não comprova o resultado.
+Na primeira tentativa de ativar R8, o APK apresentou
+`START-SQLITE_OPEN-NATIVE_HANDLE` em `openDatabaseAsync`, antes das migrações e
+da sessão. Um rollback temporário restabeleceu a inicialização. Depois de
+incorporar as regras de compatibilidade, o APK ofuscado foi testado com sucesso
+pelo usuário; essa é a configuração que passou a ser padrão.
+
+A homologação no aparelho não mede os percentuais DEX. Os resultados e o aviso
+de otimização do Play Console precisam ser conferidos no AAB final.
+
+## Correção de compatibilidade com R8 no SDK 55
+
+O `expo-modules-core` atual do upstream mantém a interface `Record`, a anotação
+`Field` e os nomes das subclasses de `CodedException`. O SDK 55 instalado não
+inclui essas três regras. O upstream documenta especificamente que renomear
+`Field` pode causar `NullPointerException` na leitura de `Field.key` por reflexão.
+O SQLite utiliza `@Field` em `OpenDatabaseOptions` durante a abertura, o que é
+compatível com a etapa e a categoria de erro observadas neste aparelho.
+
+O plugin incorpora as regras abaixo no `android/app/proguard-rules.pro` gerado,
+sem editar `node_modules`, sem novas dependências e sem preservar pacotes
+inteiros indiscriminadamente:
+
+```proguard
+-keep interface expo.modules.kotlin.records.Record
+-keep @interface expo.modules.kotlin.records.Field { *; }
+-keepnames class * extends expo.modules.kotlin.exception.CodedException
+```
+
+Fontes: [regras oficiais atuais](https://github.com/expo/expo/blob/main/packages/expo-modules-core/android/proguard-rules.pro)
+e [regras do SDK 55](https://github.com/expo/expo/blob/sdk-55/packages/expo-modules-core/android/proguard-rules.pro).
+
+O bloco de regras é substituído em cada prebuild, sem duplicação. A mesma
+configuração é aplicada a todos os builds release; os builds debug de
+desenvolvimento continuam usando a configuração debug do Expo.
+
+Gerar os pacotes **remotamente** pelo EAS:
+
+```bash
+eas build --platform android --profile preview
+eas build --platform android --profile production
+```
+
+O perfil temporário de homologação foi removido após a validação no aparelho.
+As regras de compatibilidade permanecem habilitadas junto com o R8 em ambos os
+perfis. A geração do Gradle e os testes JS continuam sendo verificações de
+configuração; o percentual de ofuscação é medido no pacote final.
 
 ## Orientação e redimensionamento
 
@@ -42,6 +85,25 @@ Validar no release: telefone em retrato/paisagem, tablet, tela dividida,
 redimensionamento com teclado aberto, câmera/QR Code, seletores e assinatura da
 inspeção. As telas usam SafeArea/insets e layouts flexíveis, mas a geração do
 manifesto não equivale à homologação visual em aparelho.
+
+### Recursos de hardware opcionais no Google Play
+
+O plugin também declara `android.hardware.screen.portrait` e
+`android.hardware.wifi` com `android:required="false"` e
+`tools:replace="android:required"`. Isso impede filtros de instalação por
+orientação retrato ou ausência de Wi-Fi, inclusive quando bibliotecas declaram
+esses requisitos. O NetInfo usa `ACCESS_WIFI_STATE`, que pode implicar o
+requisito de Wi-Fi no Google Play; a permissão é mantida para consultar a rede.
+
+O teste de prebuild verifica as declarações, a regra de mesclagem e a correção
+de manifestos antigos com recursos obrigatórios/duplicados. O ajuste vale para
+`preview` e `production`. Não altera as regras de captura de GPS dos lançamentos.
+É necessário gerar outro AAB no EAS e substituir o pacote no Play Console;
+uma atualização OTA não altera o manifesto do AAB já enviado. O manifesto final
+mesclado e a disponibilidade devem ser conferidos no novo pacote no Google Play.
+
+Referências: [recursos e filtros de instalação](https://developer.android.com/guide/topics/manifest/uses-feature-element)
+e [mesclagem de manifestos](https://developer.android.com/build/manage-manifests).
 
 ## Exibição de ponta a ponta
 
@@ -84,16 +146,15 @@ credenciais e registros não são enviados ao log nem à tela. `unknown` signifi
 que o erro não correspondeu às categorias conhecidas; a referência indica a
 etapa e não deve ser interpretada como confirmação da causa raiz.
 
-O fluxo continua preservando os dados e oferecendo nova tentativa. Não libera
-o app com o banco indisponível, nem apaga o banco para contornar a falha. A
-ofuscação permanece habilitada; sem o erro nativo do aparelho não há evidência
-suficiente para atribuir a falha ao R8 ou adicionar regras de preservação.
+O fluxo continua preservando os dados e oferecendo nova tentativa. A configuração
+com R8 e as regras de compatibilidade foi validada no aparelho. Os diagnósticos
+seguros permanecem disponíveis para identificar futuras falhas.
 
 Os testes locais usam SQLite em arquivo temporário e uma conexão separada por
 transação, como a API do Expo, além de verificar repetição da inicialização,
 preservação de pendências e ausência de dados sensíveis nos diagnósticos. Não
-substituem a validação JNI/R8 em um APK produzido pelo EAS. Gerar o próximo APK
-pelo Expo/EAS e, se a falha persistir, informar a referência exibida na tela.
+substituem a validação JNI/R8 em um APK produzido pelo EAS. Em caso de nova
+falha, informar a referência exibida na tela.
 
 ### Configuração nativa
 
@@ -102,18 +163,28 @@ npm run check:android-release
 ```
 
 O comando cria uma cópia temporária sem `.env`, gera Android offline com o
-template instalado e confere as propriedades do R8, o arquivo de regras, o
-patch do AGP, a Activity adaptável, o edge-to-edge e as configurações de
-segurança. Executa prebuild duas vezes para detectar duplicação/perda de
-configuração. Não compila um AAB nem consulta EAS. Use `-- --keep` para conservar
+template instalado e confere R8/redução de recursos habilitados por padrão,
+preset, AGP, regras do Expo, Activity adaptável, edge-to-edge e configurações de
+segurança. Confere também os perfis APK/AAB e simula um projeto anteriormente
+gerado sem R8, verificando que o prebuild corrige esses arquivos. Repete a geração
+para conferir idempotência. Limita o heap do processo filho a 256 MB. Não compila APK/AAB,
+não executa Gradle nem consulta EAS. Use `-- --keep` para conservar
 a cópia gerada e inspecioná-la; por padrão ela é removida no final.
 
-Para publicação, gerar um novo AAB pelo perfil `production` existente. Ele usa
-`autoIncrement` para o código de versão remoto. Uma atualização JavaScript/OTA
-não altera essa configuração nativa. Homologar o **release ofuscado**: abertura
-do app, login/biometria, SQLite/SecureStore, registros offline, sincronização,
-fotos/câmera, GPS, QR Code e assinatura. Guardar o `mapping.txt` correspondente
-ao pacote para interpretar relatórios de falha.
+Gerar um novo APK **remotamente pelo EAS**:
+
+```bash
+eas build --platform android --profile preview
+```
+
+Não compilar APK/AAB localmente neste WSL por limitação de memória. A mudança é
+nativa: atualizar somente JavaScript/OTA não altera o pacote já instalado.
+Homologar abertura do app, login/biometria, SQLite/SecureStore, registros offline,
+sincronização, fotos/câmera, GPS, QR Code e assinatura. O perfil `production`
+gera AAB e usa `autoIncrement` para o código de versão remoto.
+
+Guardar o `mapping.txt` correspondente a cada pacote publicado para interpretar
+relatórios de falha com a ofuscação habilitada.
 
 Com a ferramenta Android CLI atual, analisar o AAB final:
 

@@ -103,6 +103,7 @@ function manualDependencies(overrides = {}) {
     ['scaffolds', 'fetchLatestScaffold'],
     ['work-orders', 'fetchWorkOrders'],
     ['work-functions', 'fetchWorkFunctions'],
+    ['contract-shifts', 'fetchContractShifts'],
   ])
     mocks[`@/services/${module}.service`] = {
       [name]: async () => {
@@ -121,6 +122,7 @@ test('manual base update includes component types and completes every progress s
     steps = value
   })
   assert.ok(calls.includes('fetchScaffoldComponentTypes'))
+  assert.ok(calls.includes('fetchContractShifts'))
   assert.ok(steps.every((step) => step.status === 'done' && step.progress === 100))
   assert.equal(calls.at(-1), 'lastSyncAt')
 })
